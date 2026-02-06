@@ -34,8 +34,9 @@ jobs:
         mkdir -p release
         cp bin/jmraidstatus release/
         cp README.md release/
-        cp COPYING release/
+        cp LICENSE release/
         cp QUICK_START.md release/
+        cp SECTOR_USAGE.md release/
         cd release
         tar czf jmraidstatus-${{ steps.version.outputs.VERSION }}-linux-x86_64.tar.gz *
         cd ..
