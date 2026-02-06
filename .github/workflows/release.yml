@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build Release Binaries
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Get version from tag
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential gcc make
+
+    - name: Build
+      run: make
+
+    - name: Create release package
+      run: |
+        mkdir -p release
+        cp bin/jmraidstatus release/
+        cp README.md release/
+        cp COPYING release/
+        cp QUICK_START.md release/
+        cd release
+        tar czf jmraidstatus-${{ steps.version.outputs.VERSION }}-linux-x86_64.tar.gz *
+        cd ..
+
+    - name: Generate checksums
+      run: |
+        cd release
+        sha256sum jmraidstatus-${{ steps.version.outputs.VERSION }}-linux-x86_64.tar.gz > checksums.txt
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: jmraidstatus ${{ steps.version.outputs.VERSION }}
+        body: |
+          ## jmraidstatus ${{ steps.version.outputs.VERSION }}
+
+          SMART health monitoring tool for JMicron RAID controllers.
+
+          ### Installation
+          ```bash
+          tar xzf jmraidstatus-${{ steps.version.outputs.VERSION }}-linux-x86_64.tar.gz
+          sudo install -m 755 jmraidstatus /usr/local/bin/
+          ```
+
+          ### Usage
+          ```bash
+          sudo jmraidstatus /dev/sdX
+          ```
+
+          See [QUICK_START.md](https://github.com/${{ github.repository }}/blob/master/QUICK_START.md) for detailed usage instructions.
+        files: |
+          release/jmraidstatus-${{ steps.version.outputs.VERSION }}-linux-x86_64.tar.gz
+          release/checksums.txt
+        draft: false
+        prerelease: false

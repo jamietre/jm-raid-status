@@ -1,0 +1,114 @@
+#!/bin/bash
+#
+# check_sectors - Verify which sectors are safe to use as communication channel
+#
+# This script checks various sectors on a disk to find empty (all-zero) sectors
+# that can be safely used by jmraidstatus for the JMicron protocol communication.
+#
+# Usage: sudo ./check_sectors /dev/sdX
+#
+
+DEVICE=$1
+
+if [ -z "$DEVICE" ]; then
+    echo "Usage: $0 /dev/sdX"
+    echo ""
+    echo "Example: sudo $0 /dev/sdc"
+    echo ""
+    echo "This script checks which sectors are empty (all zeros) and safe to use"
+    echo "as a communication channel for the JMicron protocol."
+    exit 1
+fi
+
+if [ ! -b "$DEVICE" ]; then
+    echo "Error: $DEVICE is not a block device"
+    exit 1
+fi
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Error: This script must be run as root (use sudo)"
+    exit 1
+fi
+
+echo "======================================================================="
+echo "  Sector Safety Check for JMicron RAID Protocol"
+echo "  Device: $DEVICE"
+echo "======================================================================="
+echo ""
+
+echo "1. Partition Layout:"
+echo "-------------------"
+fdisk -l "$DEVICE" 2>/dev/null | grep -E "^$DEVICE|^Disk |^Units|Start"
+echo ""
+
+FIRST_PARTITION_START=$(fdisk -l "$DEVICE" 2>/dev/null | grep "^$DEVICE" | head -1 | awk '{print $2}')
+if [ -n "$FIRST_PARTITION_START" ]; then
+    echo "First partition starts at sector: $FIRST_PARTITION_START"
+    echo "Safe sector range: 64 - $((FIRST_PARTITION_START - 1))"
+else
+    echo "No partitions found on device"
+    echo "Safe sector range: 64 - 2047 (assuming standard layout)"
+fi
+echo ""
+
+echo "2. Checking Specific Sectors:"
+echo "-----------------------------"
+
+check_sector() {
+    local sector=$1
+    local name=$2
+
+    # Read sector and check if all zeros
+    ZEROS=$(dd if="$DEVICE" skip=$sector count=1 bs=512 2>/dev/null | tr -d '\0' | wc -c)
+
+    if [ "$ZEROS" -eq 0 ]; then
+        echo "  Sector $sector ($name): ✓ EMPTY (safe to use)"
+        return 0
+    else
+        echo "  Sector $sector ($name): ✗ Contains data ($ZEROS non-zero bytes)"
+        return 1
+    fi
+}
+
+echo ""
+echo "Checking candidate sectors:"
+check_sector 33 "Original default (0x21)"
+check_sector 64 "After partition table"
+check_sector 128 "128"
+check_sector 256 "256"
+check_sector 512 "512"
+check_sector 1024 "New default (0x400) - RECOMMENDED"
+check_sector 1536 "1536"
+check_sector 2000 "2000"
+check_sector 2047 "Before typical partition"
+
+echo ""
+echo "3. Detailed View of Key Sectors:"
+echo "--------------------------------"
+
+show_sector() {
+    local sector=$1
+    local name=$2
+    echo ""
+    echo "Sector $sector ($name):"
+    dd if="$DEVICE" skip=$sector count=1 bs=512 2>/dev/null | xxd | head -8
+}
+
+show_sector 1024 "Recommended default"
+show_sector 33 "Original default"
+
+echo ""
+echo "======================================================================="
+echo "  RECOMMENDATIONS:"
+echo "======================================================================="
+echo ""
+echo "  • Default sector 1024 is recommended (nicely aligned, safe position)"
+echo "  • Sector must be EMPTY (all zeros) to be safe"
+echo "  • Sector must be BEFORE first partition start"
+echo "  • Avoid sectors 0-63 (MBR, partition table, boot loaders)"
+echo ""
+echo "  To use a specific sector:"
+echo "    sudo jmraidstatus --sector 1024 $DEVICE"
+echo ""
+echo "  See SECTOR_USAGE.md for detailed technical information."
+echo ""
