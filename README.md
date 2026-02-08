@@ -6,21 +6,11 @@ A console tool to monitor disk health in JMicron hardware RAID arrays, including
 
 jmraidstatus communicates with JMicron SATA RAID controllers to read SMART (Self-Monitoring, Analysis and Reporting Technology) data from disks behind the controller. Unlike smartctl which cannot access disks behind hardware RAID controllers, jmraidstatus uses the controller's proprietary protocol to retrieve health information.
 
-**USE AT YOUR OWN RISK. ENSURE YOU HAVE COMPLETE BACKUPS BEFORE USING THIS TOOL.**
+This tool uses the reverse-engineered JMicron proprietary protocol to communicate with RAID controllers. It has been tested successfully on:
 
-This tool uses the reverse-engineered JMicron proprietary protocol to communicate with RAID controllers. It has been tested successfully on exactly one RAID enclosure:
+- Mediasonic Proraid HFR2-SU3S2 External hardware RAID box (JMB567 controller)
 
-- Mediasonic Proraid HFR2-SU3S2 External hardware RAID box
-
-**The JMicron protocol temporarily overwrites a sector on your disk (default: sector 1024) as a communication channel.** The original data is backed up and restored, but if the tool crashes or is interrupted, that sector will remain corrupted. **The tool will refuse to run if the sector contains any data** - this safety check cannot be bypassed. See [SECTOR_USAGE.md](SECTOR_USAGE.md) for detailed technical explanation.
-
-There is also evidence of this protocol causing RAID array failure and complete data loss in at least one case. According to the [Hard Disk Sentinel](https://www.hdsentinel.com/) developer, who has also implemented JMicron support based on the same protocol:
-
-> _"This tested on several systems/enclosures and on most of them, everything worked perfectly. But in one case, we found that it resulted the RAID array to break and the complete information stored on the drives lost."_
->
-> — [HD Sentinel Forum, November 2019](https://www.hdsentinel.com/forum/viewtopic.php?p=18046#p18046)
-
-If you use this on other devices, please make a pull request to update this list or open an issue.
+If you use this on other devices, please report your results! Make a pull request or open an issue.
 
 ## Acknowledgments
 
@@ -46,6 +36,19 @@ This implementation is a rewrite using the protocol knowledge from that research
   - JSON format - For scripting and automation
 - **Exit codes for monitoring systems** - Integrate with monitoring tools
 - **Configurable sector number** - Avoid conflicts with data
+
+## Possible Risk
+
+**The JMicron protocol uses a disk sector as a communication channel** (default: sector 1024). The tool temporarily writes commands to this sector and reads responses back. To protect your data:
+
+- **The tool refuses to run if the sector contains any data** - this safety check cannot be bypassed
+- Sector contents are verified as empty before any operations
+- The sector is restored to zeros after communication completes
+- Signal handlers ensure cleanup even if interrupted (Ctrl+C, crashes, etc.)
+
+See [SECTOR_USAGE.md](SECTOR_USAGE.md) for detailed technical explanation of the protocol and safety mechanisms.
+
+**Historical context:** Early implementations of this protocol (including [Hard Disk Sentinel](https://www.hdsentinel.com/)) experienced RAID array failures in at least one case, likely due to overwriting in-use sectors. This implementation includes safety checks specifically designed to prevent this issue. However, as with any tool that interacts destructively with storage hardware, **ensure you have current backups before first use**.
 
 ## Installation
 
