@@ -9,6 +9,7 @@
 #include "jm_protocol.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <asm/byteorder.h>
 
 #define JM_RAID_SCRAMBLED_CMD (0x197b0322)
@@ -81,9 +82,11 @@ static int validate_identify_response(const uint8_t* response) {
         }
     }
 
-    /* Real disks have mostly printable model strings with actual content
-     * Require at least 20 printable chars and at least 8 non-space chars */
-    if (printable_count < 20 || total_non_space < 8) {
+    /* Real disks have printable model strings with actual content
+     * Empty slots return all zeros (0 printable chars)
+     * Require at least 8 printable chars and at least 5 non-space chars
+     * to distinguish real disks from garbage/empty slots */
+    if (printable_count < 8 || total_non_space < 5) {
         return 0;  // Not a valid disk response
     }
 
@@ -121,6 +124,36 @@ int jm_get_disk_identify(int fd, int disk_num, char* model, char* serial, char* 
     if (execute_probe_command(fd, probe_cmd, sizeof(probe_cmd), response, sector) != 0) {
         /* CRC error or communication failure - this is a real error */
         return -1;
+    }
+
+    /* Dump raw response if debug mode enabled */
+    if (getenv("JMRAIDSTATUS_DUMP_RAW") != NULL) {
+        fprintf(stderr, "\n=== IDENTIFY DISK %d RESPONSE (512 bytes) ===\n", disk_num);
+        for (int i = 0; i < 512; i += 16) {
+            fprintf(stderr, "%04x: ", i);
+            for (int j = 0; j < 16 && i + j < 512; j++) {
+                fprintf(stderr, "%02x ", response[i + j]);
+            }
+            fprintf(stderr, " |");
+            for (int j = 0; j < 16 && i + j < 512; j++) {
+                uint8_t c = response[i + j];
+                fprintf(stderr, "%c", (c >= 32 && c < 127) ? c : '.');
+            }
+            fprintf(stderr, "|\n");
+        }
+        fprintf(stderr, "\n");
+    }
+
+    /* Check for degraded RAID status flag at offset 0x1F0
+     * 0x07 = RAID is degraded (one or more disks missing/failed, cannot rebuild)
+     * 0x0F = RAID is operational (all disks present, safe to operate)
+     *        - Includes both healthy AND rebuilding states
+     *        - Controller does not distinguish between them
+     * This flag appears in ALL disk responses (even empty slots) */
+    uint8_t raid_status = response[0x1F0];
+    if (raid_status == 0x07) {
+        /* Store degraded flag in environment for main code to check */
+        setenv("JMRAIDSTATUS_DEGRADED", "1", 1);
     }
 
     /* Command succeeded with valid CRC, now check if response looks like a real disk */
@@ -195,6 +228,28 @@ int jm_smart_read_values(int fd, int disk_num, smart_values_page_t* values, uint
         return -1;
     }
 
+    /* Dump raw response if debug mode enabled */
+    if (getenv("JMRAIDSTATUS_DUMP_RAW") != NULL) {
+        fprintf(stderr, "\n=== SMART VALUES DISK %d RESPONSE (512 bytes) ===\n", disk_num);
+        fprintf(stderr, "First 32 bytes are JMicron header/echo:\n");
+        for (int i = 0; i < 32; i += 16) {
+            fprintf(stderr, "%04x: ", i);
+            for (int j = 0; j < 16 && i + j < 32; j++) {
+                fprintf(stderr, "%02x ", response[i + j]);
+            }
+            fprintf(stderr, "\n");
+        }
+        fprintf(stderr, "Remaining bytes are SMART data:\n");
+        for (int i = 32; i < 512; i += 16) {
+            fprintf(stderr, "%04x: ", i);
+            for (int j = 0; j < 16 && i + j < 512; j++) {
+                fprintf(stderr, "%02x ", response[i + j]);
+            }
+            fprintf(stderr, "\n");
+        }
+        fprintf(stderr, "\n");
+    }
+
     /* The JMicron response has the actual SMART data starting at offset 0x20 (32 bytes)
      * The first 32 bytes contain the JMicron command header/echo */
     return smart_parse_values(response + 0x20, values);
@@ -258,11 +313,17 @@ int jm_get_disk_smart_data(int fd, int disk_num, const char* disk_name,
     return smart_combine_data(disk_num, disk_name, &values, &thresholds, data);
 }
 
-int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disks, uint32_t sector) {
+int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disks, uint32_t sector, int* is_degraded) {
     int disks_found = 0;
+    int verbose = (getenv("JMRAIDSTATUS_VERBOSE") != NULL);
+    int degraded = 0;
 
     if (data == NULL || num_disks == NULL) {
         return -1;
+    }
+
+    if (is_degraded != NULL) {
+        *is_degraded = 0;
     }
 
     /* Query each possible disk (0-4) */
@@ -271,6 +332,10 @@ int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disk
         char serial[21] = {0};
         char firmware[9] = {0};
         uint64_t size_mb = 0;
+
+        if (verbose) {
+            fprintf(stderr, "  Probing disk slot %d...\n", i);
+        }
 
         /* Initialize data for this slot */
         memset(&data[i], 0, sizeof(disk_smart_data_t));
@@ -286,10 +351,20 @@ int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disk
 
         if (identify_result == -2) {
             /* Empty slot - not an error, just continue */
+            if (verbose) {
+                fprintf(stderr, "    Slot %d: Empty (no disk present)\n", i);
+            }
             continue;
         } else if (identify_result != 0) {
             /* Communication error - warning already printed, skip this disk */
+            if (verbose) {
+                fprintf(stderr, "    Slot %d: Communication error\n", i);
+            }
             continue;
+        }
+
+        if (verbose) {
+            fprintf(stderr, "    Slot %d: Found disk - %s\n", i, model);
         }
 
         /* Get SMART data */
@@ -307,5 +382,26 @@ int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disk
     }
 
     *num_disks = disks_found;
+
+    /* Check for degraded RAID using the controller's status flag
+     * The JMicron controller reports RAID degradation at offset 0x1F0 in IDENTIFY responses:
+     *   0x07 = RAID degraded (one or more disks missing/failed)
+     *   0x0F = RAID healthy
+     * This flag is set during jm_get_disk_identify() calls */
+    if (getenv("JMRAIDSTATUS_DEGRADED") != NULL) {
+        degraded = 1;
+        if (verbose) {
+            fprintf(stderr, "\n*** DEGRADED RAID DETECTED (controller flag 0x07) ***\n");
+            fprintf(stderr, "    RAID array is operating in degraded mode\n");
+            fprintf(stderr, "    One or more disks have failed or been removed\n");
+            fprintf(stderr, "    Found %d active disk%s\n", disks_found, disks_found == 1 ? "" : "s");
+            fprintf(stderr, "    CRITICAL: Array has REDUCED or NO redundancy!\n\n");
+        }
+    }
+
+    if (is_degraded != NULL) {
+        *is_degraded = degraded;
+    }
+
     return (disks_found > 0) ? 0 : -1;
 }

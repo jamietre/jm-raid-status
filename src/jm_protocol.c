@@ -17,6 +17,8 @@
 #include <scsi/sg.h>
 #include <asm/byteorder.h>
 #include <errno.h>
+#include <signal.h>
+#include <stdatomic.h>
 
 #define READ_CMD (0x28)
 #define WRITE_CMD (0x2a)
@@ -28,6 +30,89 @@
 /* Static SG_IO header - reused for all operations */
 static sg_io_hdr_t sg_io_hdr;
 static uint8_t rw_cmd_blk[RW_CMD_LEN];
+
+/* Global state for signal handlers - ensures cleanup on interruption */
+static volatile sig_atomic_t g_cleanup_fd = -1;
+static volatile sig_atomic_t g_cleanup_sector = 0;
+static volatile sig_atomic_t g_cleanup_done = 0;
+
+/**
+ * Signal handler - writes zeros to communication sector and exits
+ * This is called on SIGINT (Ctrl+C), SIGTERM, etc.
+ */
+static void jm_signal_handler(int signum) {
+    /* If cleanup already done or not initialized, just exit */
+    if (g_cleanup_done || g_cleanup_fd < 0) {
+        _exit(128 + signum);
+    }
+
+    /* Mark cleanup as done (prevents re-entry) */
+    g_cleanup_done = 1;
+
+    /* Write zeros to sector - use direct write, avoid jm_cleanup_device
+     * to keep signal handler simple and async-signal-safe */
+    uint8_t zero_sector[512];
+    memset(zero_sector, 0, 512);
+
+    /* Setup write command */
+    uint8_t cmd_blk[10];
+    memset(cmd_blk, 0, 10);
+    cmd_blk[0] = WRITE_CMD;
+    cmd_blk[5] = g_cleanup_sector & 0xFF;
+    cmd_blk[4] = (g_cleanup_sector >> 8) & 0xFF;
+    cmd_blk[3] = (g_cleanup_sector >> 16) & 0xFF;
+    cmd_blk[2] = (g_cleanup_sector >> 24) & 0xFF;
+    cmd_blk[8] = 0x01;  // Number of sectors
+
+    sg_io_hdr_t io_hdr;
+    memset(&io_hdr, 0, sizeof(io_hdr));
+    io_hdr.interface_id = 'S';
+    io_hdr.dxfer_direction = SG_DXFER_TO_DEV;
+    io_hdr.cmd_len = 10;
+    io_hdr.dxfer_len = 512;
+    io_hdr.dxferp = zero_sector;
+    io_hdr.cmdp = cmd_blk;
+    io_hdr.timeout = 3000;
+
+    /* Best effort write - ignore errors in signal handler */
+    ioctl(g_cleanup_fd, SG_IO, &io_hdr);
+
+    /* Exit with signal-specific exit code */
+    _exit(128 + signum);
+}
+
+/**
+ * Setup signal handlers to ensure cleanup on interruption
+ */
+void jm_setup_signal_handlers(int fd, uint32_t sector) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = jm_signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESETHAND;  /* Only catch first signal */
+
+    /* Store for signal handler */
+    g_cleanup_fd = fd;
+    g_cleanup_sector = sector;
+    g_cleanup_done = 0;
+
+    /* Install handlers for catchable termination signals */
+    sigaction(SIGINT, &sa, NULL);   /* Ctrl+C */
+    sigaction(SIGTERM, &sa, NULL);  /* kill command */
+    sigaction(SIGHUP, &sa, NULL);   /* Terminal hangup */
+    sigaction(SIGQUIT, &sa, NULL);  /* Ctrl+\ */
+}
+
+/**
+ * Remove signal handlers (restore default behavior)
+ */
+void jm_remove_signal_handlers(void) {
+    signal(SIGINT, SIG_DFL);
+    signal(SIGTERM, SIG_DFL);
+    signal(SIGHUP, SIG_DFL);
+    signal(SIGQUIT, SIG_DFL);
+    g_cleanup_fd = -1;
+}
 static uint8_t sense_buffer[32];
 
 const char* jm_error_string(jm_error_code_t error_code) {
@@ -101,10 +186,25 @@ int jm_init_device(const char* device_path, int* fd_out, uint8_t* backup_sector,
     return JM_SUCCESS;
 }
 
-int jm_cleanup_device(int fd, const uint8_t* backup_sector, uint32_t sector) {
-    if (fd < 0 || backup_sector == NULL) {
+int jm_cleanup_device(int fd, uint32_t sector) {
+    if (fd < 0) {
         return JM_ERROR_INVALID_ARGS;
     }
+
+    /* Mark cleanup as done to prevent signal handler from running */
+    g_cleanup_done = 1;
+
+    /* Idempotent - safe to call multiple times */
+    if (g_cleanup_fd == -1) {
+        return JM_SUCCESS;  /* Already cleaned up */
+    }
+
+    /* Remove signal handlers */
+    jm_remove_signal_handlers();
+
+    /* Write zeros to sector (restore to verified-safe state) */
+    static uint8_t zero_sector[512];
+    memset(zero_sector, 0, 512);
 
     /* Update command block for write */
     rw_cmd_blk[0] = WRITE_CMD;
@@ -113,9 +213,9 @@ int jm_cleanup_device(int fd, const uint8_t* backup_sector, uint32_t sector) {
     rw_cmd_blk[3] = (sector >> 16) & 0xFF;
     rw_cmd_blk[2] = (sector >> 24) & 0xFF;
 
-    /* Restore the original sector data */
+    /* Write zeros to sector */
     sg_io_hdr.dxfer_direction = SG_DXFER_TO_DEV;
-    sg_io_hdr.dxferp = (void*)backup_sector;
+    sg_io_hdr.dxferp = zero_sector;
 
     if (ioctl(fd, SG_IO, &sg_io_hdr) < 0) {
         close(fd);
@@ -123,6 +223,7 @@ int jm_cleanup_device(int fd, const uint8_t* backup_sector, uint32_t sector) {
     }
 
     close(fd);
+    g_cleanup_fd = -1;  /* Mark as cleaned up */
     return JM_SUCCESS;
 }
 

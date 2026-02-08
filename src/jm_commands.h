@@ -81,8 +81,9 @@ int jm_get_disk_smart_data(int fd, int disk_num, const char* disk_name,
  * @param data Output array of SMART data (must have space for 5 disks)
  * @param num_disks Output number of disks found
  * @param sector Sector number for communication
+ * @param is_degraded Optional output: set to 1 if degraded RAID detected, 0 otherwise (can be NULL)
  * @return 0 on success, -1 on error
  */
-int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disks, uint32_t sector);
+int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disks, uint32_t sector, int* is_degraded);
 
 #endif /* JM_COMMANDS_H */

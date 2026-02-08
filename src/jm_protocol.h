@@ -35,14 +35,28 @@ typedef enum {
 int jm_init_device(const char* device_path, int* fd_out, uint8_t* backup_sector, uint32_t sector);
 
 /**
- * Clean up and restore original sector data
+ * Clean up and restore sector to zeros
+ * Can be called multiple times safely (idempotent)
  *
  * @param fd File descriptor from jm_init_device
- * @param backup_sector Backup sector data to restore
  * @param sector Sector number that was used
  * @return JM_SUCCESS on success, error code on failure
  */
-int jm_cleanup_device(int fd, const uint8_t* backup_sector, uint32_t sector);
+int jm_cleanup_device(int fd, uint32_t sector);
+
+/**
+ * Setup signal handlers to ensure sector cleanup on interruption
+ * Must be called after jm_init_device
+ *
+ * @param fd File descriptor to cleanup on signal
+ * @param sector Sector number to zero on cleanup
+ */
+void jm_setup_signal_handlers(int fd, uint32_t sector);
+
+/**
+ * Remove signal handlers (called automatically on cleanup)
+ */
+void jm_remove_signal_handlers(void);
 
 /**
  * Send wakeup sequence to JMicron controller

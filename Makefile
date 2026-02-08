@@ -3,6 +3,8 @@ CFLAGS = -g -O2 -Wall -Wextra -std=gnu99
 SRCDIR = src
 BINDIR = bin
 OBJDIR = $(BINDIR)/obj
+TESTDIR = tests
+TESTBINDIR = $(BINDIR)/tests
 
 SOURCES = $(SRCDIR)/jmraidstatus.c \
           $(SRCDIR)/jm_protocol.c \
@@ -37,4 +39,31 @@ clean:
 install: $(TARGET)
 	install -D -m 755 $(TARGET) $(DESTDIR)/usr/local/bin/jmraidstatus
 
-.PHONY: all clean install
+# Unit tests
+TEST_SOURCES = $(wildcard $(TESTDIR)/test_*.c)
+TEST_BINS = $(patsubst $(TESTDIR)/%.c,$(TESTBINDIR)/%,$(TEST_SOURCES))
+
+# Shared object files needed for tests (exclude main)
+TEST_OBJS = $(filter-out $(OBJDIR)/jmraidstatus.o,$(OBJECTS))
+
+tests: $(TEST_BINS)
+	@echo ""
+	@echo "Running unit tests..."
+	@echo ""
+	@for test in $(TEST_BINS); do \
+		echo "Running $$test..."; \
+		$$test || exit 1; \
+	done
+	@echo ""
+	@echo "All test suites passed!"
+
+$(TESTBINDIR)/%: $(TESTDIR)/%.c $(TEST_OBJS) | $(TESTBINDIR)
+	$(CC) $(CFLAGS) -I$(TESTDIR) $< $(TEST_OBJS) -o $@
+
+$(TESTBINDIR):
+	@mkdir -p $(TESTBINDIR)
+
+clean-tests:
+	-rm -rf $(TESTBINDIR)
+
+.PHONY: all clean install tests clean-tests

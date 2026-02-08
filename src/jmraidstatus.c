@@ -519,6 +519,7 @@ int main(int argc, char **argv)
     disk_smart_data_t disk_data[5];
     int num_disks = 0;
     int exit_code = 0;
+    int is_degraded = 0;
 
     /* Parse command-line arguments */
     if (parse_arguments(argc, argv, &options) != 0)
@@ -655,6 +656,14 @@ int main(int argc, char **argv)
         printf("Sector %u verified empty (safe to use).\n", options.sector);
     }
 
+    /* Setup signal handlers to ensure cleanup on interruption */
+    jm_setup_signal_handlers(fd, options.sector);
+
+    if (options.verbose)
+    {
+        printf("Signal handlers installed (sector will be restored on Ctrl+C).\n");
+    }
+
     /* Send wakeup sequence */
     if (options.verbose)
     {
@@ -669,7 +678,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "Error: Failed to wake up controller\n");
             fprintf(stderr, "  %s\n", jm_error_string(result));
         }
-        jm_cleanup_device(fd, backup_sector, options.sector);
+        jm_cleanup_device(fd, options.sector);
         return 3;
     }
 
@@ -695,7 +704,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Error: Failed to read SMART data from disk %d\n",
                         options.disk_number);
             }
-            jm_cleanup_device(fd, backup_sector, options.sector);
+            jm_cleanup_device(fd, options.sector);
             return 3;
         }
     }
@@ -707,15 +716,29 @@ int main(int argc, char **argv)
             printf("Querying all disks...\n");
         }
 
-        result = jm_get_all_disks_smart_data(fd, disk_data, &num_disks, options.sector);
+        result = jm_get_all_disks_smart_data(fd, disk_data, &num_disks, options.sector, &is_degraded);
         if (result != 0)
         {
             if (!options.quiet)
             {
                 fprintf(stderr, "Error: Failed to read SMART data\n");
             }
-            jm_cleanup_device(fd, backup_sector, options.sector);
+            jm_cleanup_device(fd, options.sector);
             return 3;
+        }
+
+        /* Show degraded RAID warning if detected */
+        if (is_degraded && !options.quiet)
+        {
+            printf("\n");
+            printf("=======================================================================\n");
+            printf("WARNING: DEGRADED RAID ARRAY DETECTED\n");
+            printf("=======================================================================\n");
+            printf("Expected 4 disks but found only %d disk%s.\n", num_disks, num_disks == 1 ? "" : "s");
+            printf("One or more disks may have failed or been removed.\n");
+            printf("RAID array is operating in degraded mode with REDUCED or NO redundancy!\n");
+            printf("Replace failed disk(s) immediately to restore redundancy.\n");
+            printf("=======================================================================\n\n");
         }
     }
 
@@ -764,13 +787,19 @@ int main(int argc, char **argv)
     /* Determine exit code based on health status */
     exit_code = determine_exit_code(disk_data, num_disks);
 
+    /* If RAID is degraded and all disks are healthy, return warning exit code */
+    if (is_degraded && exit_code == 0)
+    {
+        exit_code = 1; /* Warning: degraded RAID even though disks are healthy */
+    }
+
     /* Clean up and restore sector */
     if (options.verbose)
     {
         printf("Restoring sector and closing device...\n");
     }
 
-    result = jm_cleanup_device(fd, backup_sector, options.sector);
+    result = jm_cleanup_device(fd, options.sector);
     if (result != JM_SUCCESS)
     {
         if (!options.quiet)

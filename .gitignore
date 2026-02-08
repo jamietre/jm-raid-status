@@ -31,3 +31,6 @@ Thumbs.db
 *.tmp
 *.bak
 *.orig
+.env
+tools/monitor/states
+
