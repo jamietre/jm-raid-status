@@ -1,17 +1,17 @@
 # Tools Directory
 
-Utility programs for jm-raid-status maintenance and troubleshooting.
+Utility programs for `jm-raid-status` maintenance and troubleshooting.
 
 ## zero_sector - Emergency Sector Cleanup
 
-**Purpose:** Overwrites a specific sector with zeros. Used for emergency recovery if jmraidstatus fails to clean up its communication sector after abnormal termination.
+**Purpose:** Overwrites a specific sector with zeros. Used for emergency recovery if `jmraidstatus` fails to clean up its communication sector after abnormal termination.
 
 ### When to Use
 
 You should **only** need this tool if:
-1. jmraidstatus crashed or was killed before completing cleanup
-2. The communication sector (default: 1024) still contains leftover data
-3. jmraidstatus refuses to run because the sector is not empty
+1. `jmraidstatus` crashed or was killed before completing cleanup
+2. The communication sector (default: `1024`) still contains leftover data
+3. `jmraidstatus` refuses to run because the sector is not empty
 
 ### Building
 
@@ -47,7 +47,7 @@ sudo ./zero_sector /dev/sde 1024
 
 ⚠️ **WARNING**: This tool can overwrite any sector on your disk. Only use it for cleaning up the jmraidstatus communication sector!
 
-- **Default communication sector**: 1024
+- **Default communication sector**: `1024`
 - If you used a different sector with `jmraidstatus --sector N`, specify that sector number
 - **Always verify** you're using the correct device path before confirming
 - This tool is for **emergency recovery only** - normal cleanup is automatic

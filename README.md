@@ -4,7 +4,7 @@ A console tool to monitor disk health in JMicron hardware RAID arrays, including
 
 ## Overview
 
-jmraidstatus communicates with JMicron SATA RAID controllers to read SMART (Self-Monitoring, Analysis and Reporting Technology) data from disks behind the controller. Unlike smartctl which cannot access disks behind hardware RAID controllers, jmraidstatus uses the controller's proprietary protocol to retrieve health information.
+`jmraidstatus` communicates with JMicron SATA RAID controllers to read SMART (Self-Monitoring, Analysis and Reporting Technology) data from disks behind the controller. Unlike `smartctl` which cannot access disks behind hardware RAID controllers, `jmraidstatus` uses the controller's proprietary protocol to retrieve health information.
 
 This tool uses the reverse-engineered JMicron proprietary protocol to communicate with RAID controllers. It has been tested successfully on:
 
@@ -80,7 +80,7 @@ The binary will be built to `bin/jmraidstatus`.
 sudo make install
 ```
 
-This installs jmraidstatus to `/usr/local/bin/`.
+This installs `jmraidstatus` to `/usr/local/bin/`.
 
 ## Usage
 

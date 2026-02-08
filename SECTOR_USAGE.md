@@ -251,7 +251,7 @@ HD Sentinel also uses this protocol but:
 
 ## Emergency Recovery: Cleaning Up a Stuck Sector
 
-If jmraidstatus was interrupted (crash, SIGKILL, power loss) before completing cleanup, the communication sector may still contain protocol data. The tool will then refuse to run with an error message:
+If `jmraidstatus` was interrupted (crash, SIGKILL, power loss) before completing cleanup, the communication sector may still contain protocol data. The tool will then refuse to run with an error message:
 
 ```
 ERROR: Sector 1024 is not empty (contains data).
@@ -278,7 +278,7 @@ sudo bin/tools/zero_sector /dev/sdX 1024
 - Safely restores the sector to empty state
 
 **When to use:**
-- ✅ jmraidstatus was interrupted and left data in the communication sector
+- ✅ `jmraidstatus` was interrupted and left data in the communication sector
 - ✅ You verified the sector should be empty (in the partition gap)
 - ✅ Tool refuses to run because sector contains data from previous failed attempt
 

@@ -134,6 +134,33 @@ Releases use GitHub Actions (`.github/workflows/release.yml`):
    - README.md, LICENSE, QUICK_START.md, SECTOR_USAGE.md
    - SHA256 checksums
 
+## Documentation Style Guide
+
+When writing or updating documentation:
+
+1. **Command names**: Always use backticks around command/program names
+   - ✅ `jmraidstatus`, `smartctl`, `dd`, `fdisk`
+   - ❌ jmraidstatus, smartctl (no backticks)
+
+2. **File paths**: Use backticks
+   - ✅ `/dev/sdc`, `src/jm_protocol.c`, `bin/jmraidstatus`
+   - ❌ /dev/sdc (in running text, not code blocks)
+
+3. **Options/flags**: Use backticks
+   - ✅ `--verbose`, `--sector`, `-d 0`
+   - ❌ --verbose (no backticks)
+
+4. **Technical terms**: Use backticks for specific values
+   - ✅ Sector `1024`, offset `0x1F0`, flag `0x07`
+   - ❌ sector 1024 (when referring to the specific value)
+
+5. **Code blocks**: Use triple backticks with language
+   ```bash
+   sudo jmraidstatus /dev/sdc
+   ```
+
+6. **Emphasis**: Use **bold** for warnings/important points, _italics_ for quotes
+
 ## License
 
 MIT License - See LICENSE file
