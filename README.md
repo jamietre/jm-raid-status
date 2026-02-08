@@ -39,7 +39,7 @@ This implementation is a rewrite using the protocol knowledge from that research
 
 ## Possible Risk
 
-**The JMicron protocol uses a disk sector as a communication channel** (default: sector 1024). The tool temporarily writes commands to this sector and reads responses back. To protect your data:
+**The JMicron protocol uses a disk sector as a communication channel** (default: sector 33). The tool temporarily writes commands to this sector and reads responses back. To protect your data:
 
 - **The tool refuses to run if the sector contains any data** - this safety check cannot be bypassed
 - Sector contents are verified as empty before any operations
@@ -101,7 +101,7 @@ jmraidstatus [OPTIONS] /dev/sdX
 - `-q, --quiet` - Minimal output (exit code only)
 - `--verbose` - Verbose output with debug info
 - `--force` - Skip hardware detection (use if auto-detection fails)
-- `--sector SECTOR` - Use specific sector number (default: 1024, must be empty)
+- `--sector SECTOR` - Use specific sector number (default: 33, must be empty)
 - `--array-size N` - Expected number of disks (1-5); fail if controller reports fewer disks present
 
 **Note**: For USB-connected RAID enclosures, the tool automatically detects the USB connection and proceeds without additional flags.
@@ -138,6 +138,8 @@ sudo jmraidstatus -d 0 -f /dev/sdc
 ```bash
 sudo jmraidstatus -j /dev/sdc > health.json
 ```
+
+See [docs/JSON_API.md](docs/JSON_API.md) for complete JSON schema documentation, field descriptions, and scripting examples.
 
 **Quiet mode (exit code only, for monitoring):**
 
@@ -236,13 +238,13 @@ Health Assessment:
 jmraidstatus uses Linux SCSI Generic (SG_IO) ioctls to communicate with the RAID controller. It:
 
 1. **Verifies sector is empty** - Checks that the sector contains all zeros (safety requirement)
-2. **Sends commands** - Writes protocol commands to the sector (default: sector `1024`)
+2. **Sends commands** - Writes protocol commands to the sector (default: sector `33`)
 3. **Exchanges commands/responses** - Uses the sector as a "mailbox" to query each disk
 4. **Parses SMART data** - Extracts attribute values and thresholds from responses
 5. **Assesses disk health** - Evaluates critical attributes for warnings/failures
 6. **Restores sector** - Writes zeros back to the sector (cleanup phase)
 
-**⚠️ IMPORTANT**: The tool **temporarily overwrites an unused sector** (default: 1024) during the 1-3 seconds it runs. The tool **will refuse to run** if the sector contains any data. If somehow interrupted before completion, that sector remains corrupted. See **[SECTOR_USAGE.md](SECTOR_USAGE.md)** for detailed technical explanation and risks.
+**⚠️ IMPORTANT**: The tool **temporarily overwrites an unused sector** (default: 33) during the 1-3 seconds it runs. The tool **will refuse to run** if the sector contains any data. If somehow interrupted before completion, that sector remains corrupted. See **[SECTOR_USAGE.md](SECTOR_USAGE.md)** for detailed technical explanation and risks.
 
 ### SMART Health Assessment
 
@@ -255,14 +257,16 @@ The tool evaluates disk health using these criteria:
 - Current Pending Sector Count (0xC5) > 0
 - Spin Retry Count (0x0A) > 0
 - Reallocation Event Count (0xC4) > 0
-- Any attribute current value ≤ manufacturer threshold
+- Any attribute current value ≤ manufacturer threshold (if available)
 - Temperature ≥ 60°C
 
 **PASSED** status if:
 
-- All attributes above thresholds
-- No critical errors
+- All critical attributes within safe ranges
+- No errors detected
 - Temperature normal
+
+**Note**: If manufacturer thresholds are unavailable (some drives/controllers don't support them), the tool uses the above default checks based on raw attribute values. This provides reliable health assessment even without factory thresholds.
 
 ### Custom SMART Thresholds
 
@@ -341,7 +345,7 @@ The JMB567 controller supports up to 5 disks (numbered 0-4). The tool automatica
 
 ## Limitations
 
-- **Requires empty sector**: Uses sector 1024 by default (can be changed with `--sector`, must be all zeros)
+- **Requires empty sector**: Uses sector 33 by default (can be changed with `--sector`, must be all zeros)
 - **Controller-specific**: Works only with JMicron JMB3xx series controllers
 - **Root required**: Needs root access for SCSI device operations
 - **Proprietary protocol**: Based on reverse-engineering of JMicron protocol
@@ -359,7 +363,7 @@ The tool takes precautions to avoid data corruption:
 - **Verifies sector is empty** before use (must be all zeros - hard requirement)
 - **Restores sector to zeros** after operations (cleanup on normal exit and signal handling)
 - Validates CRC checksums on all responses
-- Only modifies one sector temporarily (default: `1024`, configurable with `--sector`)
+- Only modifies one sector temporarily (default: `33`, configurable with `--sector`)
 
 **However, there are inherent risks:**
 

@@ -17,6 +17,17 @@
 /* Command counter for scrambled commands */
 static uint32_t cmd_counter = 1;
 
+/* Global runtime context (singleton) */
+static const jm_runtime_context_t* g_runtime_context = NULL;
+
+void jm_set_context(const jm_runtime_context_t* ctx) {
+    g_runtime_context = ctx;
+}
+
+const jm_runtime_context_t* jm_get_context(void) {
+    return g_runtime_context;
+}
+
 /* Helper function to build and execute a scrambled command */
 static int execute_probe_command(int fd, const uint8_t* probe_data, size_t probe_len,
                                  uint8_t* response, uint32_t sector) {
@@ -105,8 +116,14 @@ static int validate_identify_response(const uint8_t* response) {
     return 1;  // Looks like a valid disk
 }
 
-int jm_get_disk_identify(int fd, int disk_num, char* model, char* serial, char* firmware, uint64_t* size_mb, uint32_t sector, int dump_raw, uint8_t* disk_bitmask) {
+int jm_get_disk_identify(int fd, int disk_num, char* model, char* serial, char* firmware, uint64_t* size_mb, uint8_t* disk_bitmask) {
     if (disk_num < 0 || disk_num > 4) {
+        return -1;
+    }
+
+    const jm_runtime_context_t* ctx = jm_get_context();
+    if (ctx == NULL) {
+        fprintf(stderr, "Error: Runtime context not initialized\n");
         return -1;
     }
 
@@ -121,13 +138,13 @@ int jm_get_disk_identify(int fd, int disk_num, char* model, char* serial, char* 
     uint8_t response[512];
 
     /* Execute command - CRC failures indicate communication errors */
-    if (execute_probe_command(fd, probe_cmd, sizeof(probe_cmd), response, sector) != 0) {
+    if (execute_probe_command(fd, probe_cmd, sizeof(probe_cmd), response, ctx->sector) != 0) {
         /* CRC error or communication failure - this is a real error */
         return -1;
     }
 
     /* Dump raw response if debug mode enabled */
-    if (dump_raw) {
+    if (ctx->dump_raw) {
         fprintf(stderr, "\n=== IDENTIFY DISK %d RESPONSE (512 bytes) ===\n", disk_num);
         for (int i = 0; i < 512; i += 16) {
             fprintf(stderr, "%04x: ", i);
@@ -200,18 +217,24 @@ int jm_get_disk_identify(int fd, int disk_num, char* model, char* serial, char* 
     return 0;  /* Success: real disk with valid data */
 }
 
-int jm_get_disk_names(int fd, char disk_names[5][64], uint32_t sector) {
+int jm_get_disk_names(int fd, char disk_names[5][64]) {
     /* Use IDENTIFY DEVICE to get model names */
     for (int i = 0; i < 5; i++) {
-        if (jm_get_disk_identify(fd, i, disk_names[i], NULL, NULL, NULL, sector, 0, NULL) != 0) {
+        if (jm_get_disk_identify(fd, i, disk_names[i], NULL, NULL, NULL, NULL) != 0) {
             memset(disk_names[i], 0, 64);
         }
     }
     return 0;
 }
 
-int jm_smart_read_values(int fd, int disk_num, smart_values_page_t* values, uint32_t sector, int dump_raw) {
+int jm_smart_read_values(int fd, int disk_num, smart_values_page_t* values) {
     if (disk_num < 0 || disk_num > 4 || values == NULL) {
+        return -1;
+    }
+
+    const jm_runtime_context_t* ctx = jm_get_context();
+    if (ctx == NULL) {
+        fprintf(stderr, "Error: Runtime context not initialized\n");
         return -1;
     }
 
@@ -227,12 +250,12 @@ int jm_smart_read_values(int fd, int disk_num, smart_values_page_t* values, uint
 
     uint8_t response[512];
 
-    if (execute_probe_command(fd, probe_cmd, sizeof(probe_cmd), response, sector) != 0) {
+    if (execute_probe_command(fd, probe_cmd, sizeof(probe_cmd), response, ctx->sector) != 0) {
         return -1;
     }
 
     /* Dump raw response if debug mode enabled */
-    if (dump_raw) {
+    if (ctx->dump_raw) {
         fprintf(stderr, "\n=== SMART VALUES DISK %d RESPONSE (512 bytes) ===\n", disk_num);
         fprintf(stderr, "First 32 bytes are JMicron header/echo:\n");
         for (int i = 0; i < 32; i += 16) {
@@ -258,8 +281,14 @@ int jm_smart_read_values(int fd, int disk_num, smart_values_page_t* values, uint
     return smart_parse_values(response + 0x20, values);
 }
 
-int jm_smart_read_thresholds(int fd, int disk_num, smart_thresholds_page_t* thresholds, uint32_t sector) {
+int jm_smart_read_thresholds(int fd, int disk_num, smart_thresholds_page_t* thresholds) {
     if (disk_num < 0 || disk_num > 4 || thresholds == NULL) {
+        return -1;
+    }
+
+    const jm_runtime_context_t* ctx = jm_get_context();
+    if (ctx == NULL) {
+        fprintf(stderr, "Error: Runtime context not initialized\n");
         return -1;
     }
 
@@ -275,7 +304,7 @@ int jm_smart_read_thresholds(int fd, int disk_num, smart_thresholds_page_t* thre
 
     uint8_t response[512];
 
-    if (execute_probe_command(fd, probe_cmd, sizeof(probe_cmd), response, sector) != 0) {
+    if (execute_probe_command(fd, probe_cmd, sizeof(probe_cmd), response, ctx->sector) != 0) {
         return -1;
     }
 
@@ -285,7 +314,7 @@ int jm_smart_read_thresholds(int fd, int disk_num, smart_thresholds_page_t* thre
 }
 
 int jm_get_disk_smart_data(int fd, int disk_num, const char* disk_name,
-                            disk_smart_data_t* data, uint32_t sector, int dump_raw) {
+                            disk_smart_data_t* data) {
     smart_values_page_t values;
     smart_thresholds_page_t thresholds;
 
@@ -293,37 +322,48 @@ int jm_get_disk_smart_data(int fd, int disk_num, const char* disk_name,
         return -1;
     }
 
-    /* Read SMART values */
-    if (jm_smart_read_values(fd, disk_num, &values, sector, dump_raw) != 0) {
-        /* Disk may not be present */
-        memset(data, 0, sizeof(disk_smart_data_t));
-        data->disk_number = disk_num;
-        data->is_present = 0;
-        data->overall_status = DISK_STATUS_ERROR;
-        return -1;
+    /* Initialize basic disk info */
+    memset(data, 0, sizeof(disk_smart_data_t));
+    data->disk_number = disk_num;
+    data->is_present = 1;
+    if (disk_name != NULL) {
+        strncpy(data->disk_name, disk_name, sizeof(data->disk_name) - 1);
+        data->disk_name[sizeof(data->disk_name) - 1] = '\0';
     }
 
-    /* Read SMART thresholds */
-    if (jm_smart_read_thresholds(fd, disk_num, &thresholds, sector) != 0) {
-        memset(data, 0, sizeof(disk_smart_data_t));
-        data->disk_number = disk_num;
-        data->is_present = 0;
+    /* Read SMART values (optional - disk still shown if unavailable) */
+    if (jm_smart_read_values(fd, disk_num, &values) != 0) {
+        /* SMART VALUES unavailable - show disk with warning */
         data->overall_status = DISK_STATUS_ERROR;
-        return -1;
+        fprintf(stderr, "Warning: SMART data unavailable for disk %d (%s)\n",
+                disk_num, disk_name ? disk_name : "Unknown");
+        return 0;  /* Success - disk exists but no SMART data */
+    }
+
+    /* Read SMART thresholds (optional - will use defaults if unavailable) */
+    if (jm_smart_read_thresholds(fd, disk_num, &thresholds) != 0) {
+        /* Thresholds unavailable - zero them out and use default checks instead */
+        memset(&thresholds, 0, sizeof(thresholds));
+        fprintf(stderr, "Warning: SMART thresholds unavailable for disk %d, using default checks\n", disk_num);
     }
 
     /* Combine and assess health */
     return smart_combine_data(disk_num, disk_name, &values, &thresholds, data);
 }
 
-int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disks, uint32_t sector, int* is_degraded, int dump_raw, int expected_array_size) {
+int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disks, int* is_degraded, int* present_disks) {
     int disks_found = 0;
-    int verbose = (getenv("JMRAIDSTATUS_VERBOSE") != NULL);
     int degraded = 0;
     uint8_t disk_bitmask = 0;
     int bitmask_captured = 0;
 
     if (data == NULL || num_disks == NULL) {
+        return -1;
+    }
+
+    const jm_runtime_context_t* ctx = jm_get_context();
+    if (ctx == NULL) {
+        fprintf(stderr, "Error: Runtime context not initialized\n");
         return -1;
     }
 
@@ -339,7 +379,7 @@ int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disk
         uint64_t size_mb = 0;
         uint8_t bitmask_temp = 0;
 
-        if (verbose) {
+        if (ctx->verbose) {
             fprintf(stderr, "  Probing disk slot %d...\n", i);
         }
 
@@ -353,7 +393,7 @@ int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disk
          *   0 = disk present and identified successfully
          *  -1 = communication error (CRC failure, etc.) - will have printed warning
          *  -2 = no disk in slot (empty, but communication OK) */
-        int identify_result = jm_get_disk_identify(fd, i, model, serial, firmware, &size_mb, sector, dump_raw, &bitmask_temp);
+        int identify_result = jm_get_disk_identify(fd, i, model, serial, firmware, &size_mb, &bitmask_temp);
 
         /* Capture disk bitmask from first successful response (even if slot is empty)
          * The bitmask is the same in all responses, so we only need it once */
@@ -364,24 +404,24 @@ int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disk
 
         if (identify_result == -2) {
             /* Empty slot - not an error, just continue */
-            if (verbose) {
+            if (ctx->verbose) {
                 fprintf(stderr, "    Slot %d: Empty (no disk present)\n", i);
             }
             continue;
         } else if (identify_result != 0) {
             /* Communication error - warning already printed, skip this disk */
-            if (verbose) {
+            if (ctx->verbose) {
                 fprintf(stderr, "    Slot %d: Communication error\n", i);
             }
             continue;
         }
 
-        if (verbose) {
+        if (ctx->verbose) {
             fprintf(stderr, "    Slot %d: Found disk - %s\n", i, model);
         }
 
         /* Get SMART data */
-        if (jm_get_disk_smart_data(fd, i, model, &data[i], sector, dump_raw) == 0) {
+        if (jm_get_disk_smart_data(fd, i, model, &data[i]) == 0) {
             /* Disk exists and SMART data retrieved successfully - store disk info
              * NOTE: Must do this AFTER jm_get_disk_smart_data because smart_combine_data
              * clears the structure with memset() */
@@ -399,26 +439,42 @@ int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disk
     /* Check for degraded RAID using the disk presence bitmask from 0x1F0
      * The controller reports which disks are present via a bitmask
      * If expected_array_size is specified, compare actual vs expected */
-    if (expected_array_size > 0 && bitmask_captured) {
+    if (ctx->expected_array_size > 0 && bitmask_captured) {
         /* Count the number of present disks using popcount */
-        int present_disks = 0;
+        int disks_from_bitmask = 0;
         for (int i = 0; i < 8; i++) {
             if (disk_bitmask & (1 << i)) {
-                present_disks++;
+                disks_from_bitmask++;
             }
         }
 
+        /* Return bitmask count to caller if requested */
+        if (present_disks != NULL) {
+            *present_disks = disks_from_bitmask;
+        }
+
         /* Compare to expected array size */
-        if (present_disks < expected_array_size) {
+        if (disks_from_bitmask < ctx->expected_array_size) {
             degraded = 1;
-            if (verbose) {
+            if (ctx->verbose) {
                 fprintf(stderr, "\n*** DEGRADED RAID DETECTED (bitmask 0x%02x) ***\n", disk_bitmask);
                 fprintf(stderr, "    Expected %d disk%s, found %d disk%s present\n",
-                        expected_array_size, expected_array_size == 1 ? "" : "s",
-                        present_disks, present_disks == 1 ? "" : "s");
+                        ctx->expected_array_size, ctx->expected_array_size == 1 ? "" : "s",
+                        disks_from_bitmask, disks_from_bitmask == 1 ? "" : "s");
                 fprintf(stderr, "    RAID array is operating in degraded mode\n");
                 fprintf(stderr, "    One or more disks have failed or been removed\n");
                 fprintf(stderr, "    CRITICAL: Array has REDUCED or NO redundancy!\n\n");
+            }
+        } else if (disks_from_bitmask > ctx->expected_array_size) {
+            if (ctx->verbose) {
+                fprintf(stderr, "\n*** WARNING: MORE DISKS THAN EXPECTED (bitmask 0x%02x) ***\n", disk_bitmask);
+                fprintf(stderr, "    Expected %d disk%s, found %d disk%s present\n",
+                        ctx->expected_array_size, ctx->expected_array_size == 1 ? "" : "s",
+                        disks_from_bitmask, disks_from_bitmask == 1 ? "" : "s");
+                fprintf(stderr, "    This may indicate:\n");
+                fprintf(stderr, "    - Incorrect --array-size specified\n");
+                fprintf(stderr, "    - Extra disk added to array\n");
+                fprintf(stderr, "    - Array configuration changed\n\n");
             }
         }
     }

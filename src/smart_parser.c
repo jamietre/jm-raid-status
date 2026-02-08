@@ -191,7 +191,16 @@ int smart_combine_data(int disk_num, const char* disk_name,
         parsed->current_value = attr->current_value;
         parsed->worst_value = attr->worst_value;
         parsed->threshold = threshold;
-        parsed->raw_value = smart_raw_value_to_uint64(attr->raw_value);
+
+        /* Parse raw value - some attributes only use lower 32 bits */
+        uint64_t raw_val = smart_raw_value_to_uint64(attr->raw_value);
+
+        /* Power On Hours (0x09) - most drives only use lower 32 bits */
+        if (attr->id == 0x09) {
+            raw_val = raw_val & 0xFFFFFFFF;  /* Mask to 32 bits */
+        }
+
+        parsed->raw_value = raw_val;
         parsed->is_critical = (def != NULL) ? def->is_critical : 0;
         parsed->status = ATTR_STATUS_UNKNOWN;  // Will be assessed later
 
@@ -200,31 +209,10 @@ int smart_combine_data(int disk_num, const char* disk_name,
 
     data->num_attributes = attr_count;
 
-    /* If no valid attributes were found, mark disk as not present */
+    /* If no valid attributes were found, still show disk but mark as error status */
     if (attr_count == 0) {
-        data->is_present = 0;
         data->overall_status = DISK_STATUS_ERROR;
-        return -1;
-    }
-
-    /* Check if this looks like a real disk. Real disks must have Power On Hours (0x09)
-     * with a reasonable value (< 10 years = 87600 hours). Empty slots return garbage. */
-    int has_power_on_hours = 0;
-    for (int i = 0; i < data->num_attributes; i++) {
-        if (data->attributes[i].id == 0x09) {
-            /* Power On Hours should be reasonable (< 87600 = 10 years) */
-            if (data->attributes[i].raw_value < 87600) {
-                has_power_on_hours = 1;
-            }
-            break;
-        }
-    }
-
-    if (!has_power_on_hours) {
-        /* No valid Power On Hours - this is probably an empty slot */
-        data->is_present = 0;
-        data->overall_status = DISK_STATUS_ERROR;
-        return -1;
+        /* Don't return -1 - disk is present, just no SMART data */
     }
 
     /* Assess overall health */

@@ -17,7 +17,7 @@
 #include "config.h"
 
 #define VERSION "1.0"
-#define DEFAULT_SECTOR 1024 /* Was 0x21 (33) in original - changed to 1024 for safety */
+#define DEFAULT_SECTOR 33 /* Original sector from jmraidcon - most compatible */
 
 /* Command-line options structure */
 typedef struct
@@ -549,6 +549,7 @@ int main(int argc, char **argv)
     int num_disks = 0;
     int exit_code = 0;
     int is_degraded = 0;
+    int present_disks = 0;  /* From controller bitmask */
 
     /* Parse command-line arguments */
     if (parse_arguments(argc, argv, &options) != 0)
@@ -587,6 +588,15 @@ int main(int argc, char **argv)
 
     /* Set global config for SMART assessment */
     smart_set_config(&config);
+
+    /* Set global runtime context for JM commands */
+    jm_runtime_context_t runtime_ctx = {
+        .verbose = options.verbose,
+        .dump_raw = options.dump_raw,
+        .sector = options.sector,
+        .expected_array_size = options.expected_array_size
+    };
+    jm_set_context(&runtime_ctx);
 
     /* Validate sector is in safe range */
     if (!is_sector_in_safe_range(options.sector))
@@ -750,7 +760,7 @@ int main(int argc, char **argv)
         }
 
         result = jm_get_disk_smart_data(fd, options.disk_number, NULL,
-                                        &disk_data[options.disk_number], options.sector, options.dump_raw);
+                                        &disk_data[options.disk_number]);
         if (result == 0)
         {
             num_disks = 1;
@@ -774,7 +784,7 @@ int main(int argc, char **argv)
             printf("Querying all disks...\n");
         }
 
-        result = jm_get_all_disks_smart_data(fd, disk_data, &num_disks, options.sector, &is_degraded, options.dump_raw, options.expected_array_size);
+        result = jm_get_all_disks_smart_data(fd, disk_data, &num_disks, &is_degraded, &present_disks);
         if (result != 0)
         {
             if (!options.quiet)
@@ -785,19 +795,6 @@ int main(int argc, char **argv)
             return 3;
         }
 
-        /* Show degraded RAID warning if detected */
-        if (is_degraded && !options.quiet)
-        {
-            printf("\n");
-            printf("=======================================================================\n");
-            printf("WARNING: DEGRADED RAID ARRAY DETECTED\n");
-            printf("=======================================================================\n");
-            printf("Expected 4 disks but found only %d disk%s.\n", num_disks, num_disks == 1 ? "" : "s");
-            printf("One or more disks may have failed or been removed.\n");
-            printf("RAID array is operating in degraded mode with REDUCED or NO redundancy!\n");
-            printf("Replace failed disk(s) immediately to restore redundancy.\n");
-            printf("=======================================================================\n\n");
-        }
     }
 
     /* Output results based on mode */
@@ -830,7 +827,8 @@ int main(int argc, char **argv)
             break;
 
         case OUTPUT_MODE_JSON:
-            format_json(options.device_path, disk_data, num_disks);
+            format_json(options.device_path, disk_data, num_disks,
+                        options.expected_array_size, present_disks, is_degraded);
             break;
         }
     }
@@ -842,6 +840,44 @@ int main(int argc, char **argv)
     if (is_degraded && exit_code == 0)
     {
         exit_code = 1; /* Failed: degraded RAID even though disks are healthy */
+    }
+
+    /* Show RAID array size warnings at end (after SMART data)
+     * Skip in JSON mode - warnings are included in JSON output */
+    if (options.expected_array_size > 0 && present_disks > 0 && !options.quiet &&
+        options.output_mode != OUTPUT_MODE_JSON)
+    {
+        if (is_degraded)
+        {
+            /* Degraded: fewer disks than expected */
+            printf("\n");
+            printf("=======================================================================\n");
+            printf("WARNING: DEGRADED RAID ARRAY DETECTED\n");
+            printf("=======================================================================\n");
+            printf("Expected %d disk%s but found only %d disk%s.\n",
+                   options.expected_array_size, options.expected_array_size == 1 ? "" : "s",
+                   present_disks, present_disks == 1 ? "" : "s");
+            printf("One or more disks may have failed or been removed.\n");
+            printf("RAID array is operating in degraded mode with REDUCED or NO redundancy!\n");
+            printf("Replace failed disk(s) immediately to restore redundancy.\n");
+            printf("=======================================================================\n\n");
+        }
+        else if (present_disks > options.expected_array_size)
+        {
+            /* More disks than expected */
+            printf("\n");
+            printf("=======================================================================\n");
+            printf("WARNING: MORE DISKS THAN EXPECTED\n");
+            printf("=======================================================================\n");
+            printf("Expected %d disk%s but found %d disk%s.\n",
+                   options.expected_array_size, options.expected_array_size == 1 ? "" : "s",
+                   present_disks, present_disks == 1 ? "" : "s");
+            printf("This may indicate:\n");
+            printf("  - Incorrect --array-size specified (check your array configuration)\n");
+            printf("  - Extra disk added to array\n");
+            printf("  - Array configuration changed\n");
+            printf("=======================================================================\n\n");
+        }
     }
 
     /* Clean up and restore sector */

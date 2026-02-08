@@ -45,8 +45,12 @@ void format_full_smart(const disk_smart_data_t* disk);
  * @param device_path Device path (e.g., "/dev/sdc")
  * @param disks Array of disk SMART data
  * @param num_disks Number of disks in array
+ * @param expected_array_size Expected number of disks (0 = not specified)
+ * @param present_disks Number of disks reported by controller (0 = not available)
+ * @param is_degraded 1 if RAID is degraded, 0 otherwise
  */
-void format_json(const char* device_path, const disk_smart_data_t* disks, int num_disks);
+void format_json(const char* device_path, const disk_smart_data_t* disks, int num_disks,
+                 int expected_array_size, int present_disks, int is_degraded);
 
 /**
  * Format and print raw hex dump (original behavior)

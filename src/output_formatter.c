@@ -170,8 +170,8 @@ void format_summary(const char* device_path, const disk_smart_data_t* disks, int
         }
     }
 
-    /* Overall RAID health */
-    printf("Overall RAID Health: ");
+    /* Overall SMART health */
+    printf("Overall SMART Health: ");
     if (failed_count > 0) {
         printf("FAILED - Check disk(s) immediately!\n");
     } else {
@@ -286,7 +286,8 @@ void format_full_smart(const disk_smart_data_t* disk) {
     printf("\n");
 }
 
-void format_json(const char* device_path, const disk_smart_data_t* disks, int num_disks) {
+void format_json(const char* device_path, const disk_smart_data_t* disks, int num_disks,
+                 int expected_array_size, int present_disks, int is_degraded) {
     time_t now = time(NULL);
     struct tm* tm_info = gmtime(&now);
     char timestamp[64];
@@ -294,10 +295,84 @@ void format_json(const char* device_path, const disk_smart_data_t* disks, int nu
 
     (void)num_disks;  /* Unused but kept for API consistency */
 
+    /* Determine overall RAID status */
+    const char* raid_status = "unknown";
+    int has_failed_disk = 0;
+
+    /* Check for failed disks */
+    for (int i = 0; i < 5; i++) {
+        if (disks[i].is_present && disks[i].overall_status == DISK_STATUS_FAILED) {
+            has_failed_disk = 1;
+            break;
+        }
+    }
+
+    /* Determine status based on array size and disk health */
+    if (expected_array_size > 0 && present_disks > 0) {
+        if (is_degraded) {
+            raid_status = "degraded";
+        } else if (present_disks > expected_array_size) {
+            raid_status = has_failed_disk ? "failed" : "oversized";
+        } else if (has_failed_disk) {
+            raid_status = "failed";
+        } else {
+            raid_status = "healthy";
+        }
+    } else {
+        /* No array size validation */
+        raid_status = has_failed_disk ? "failed" : "healthy";
+    }
+
     printf("{\n");
     printf("  \"version\": \"1.0\",\n");
     printf("  \"device\": \"%s\",\n", device_path);
     printf("  \"timestamp\": \"%s\",\n", timestamp);
+
+    /* RAID status section */
+    printf("  \"raid_status\": {\n");
+    printf("    \"status\": \"%s\",\n", raid_status);
+    if (expected_array_size > 0) {
+        printf("    \"expected_disks\": %d,\n", expected_array_size);
+    }
+    if (present_disks > 0) {
+        printf("    \"present_disks\": %d,\n", present_disks);
+    }
+    printf("    \"rebuilding\": false,\n");  /* Not yet detected */
+
+    /* Build issues array */
+    printf("    \"issues\": [");
+    int first_issue = 1;
+
+    if (is_degraded && expected_array_size > 0 && present_disks > 0) {
+        if (!first_issue) printf(", ");
+        printf("\n      \"Degraded: Expected %d disk%s but found only %d disk%s\"",
+               expected_array_size, expected_array_size == 1 ? "" : "s",
+               present_disks, present_disks == 1 ? "" : "s");
+        first_issue = 0;
+    } else if (present_disks > expected_array_size && expected_array_size > 0) {
+        if (!first_issue) printf(", ");
+        printf("\n      \"Oversized: Expected %d disk%s but found %d disk%s\"",
+               expected_array_size, expected_array_size == 1 ? "" : "s",
+               present_disks, present_disks == 1 ? "" : "s");
+        first_issue = 0;
+    }
+
+    /* Add failed disk issues */
+    for (int i = 0; i < 5; i++) {
+        if (disks[i].is_present && disks[i].overall_status == DISK_STATUS_FAILED) {
+            if (!first_issue) printf(",");
+            printf("\n      \"Disk %d (%s): SMART health check failed\"",
+                   i, disks[i].disk_name[0] ? disks[i].disk_name : "Unknown");
+            first_issue = 0;
+        }
+    }
+
+    if (!first_issue) {
+        printf("\n    ");
+    }
+    printf("]\n");
+    printf("  },\n");
+
     printf("  \"disks\": [\n");
 
     int first_disk = 1;

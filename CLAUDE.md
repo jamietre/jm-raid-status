@@ -22,6 +22,12 @@ SMART health monitoring tool for JMicron RAID controllers using reverse-engineer
 
 4. **QUICK_START.md** - Quick reference for end users
 
+5. **docs/JSON_API.md** - JSON output schema and API documentation
+   - Complete field descriptions and possible values
+   - Exit code mappings
+   - Scripting examples
+   - **MUST be updated when JSON output changes**
+
 ## Critical Protocol Discovery
 
 ### RAID Degradation Detection (Feb 2026)
@@ -160,6 +166,42 @@ When writing or updating documentation:
    ```
 
 6. **Emphasis**: Use **bold** for warnings/important points, _italics_ for quotes
+
+## JSON Output Documentation
+
+**CRITICAL**: When making ANY changes to JSON output format:
+
+1. **Update `docs/JSON_API.md`** - This is the authoritative JSON schema documentation
+   - Add/modify field descriptions
+   - Update possible values for enums (e.g., `status` values)
+   - Add examples showing the new/changed fields
+   - Update version history table
+
+2. **Write/Update Tests** in `tests/test_output_formatter.c`
+   - Add test cases for new fields/values
+   - Verify JSON is valid (balanced braces, proper structure)
+   - Test that no extraneous text appears outside JSON output
+   - Validate enum values are documented
+
+3. **Why This Matters**:
+   - JSON output is consumed by scripts and monitoring systems
+   - Undocumented changes break integrations
+   - Schema documentation is a contract with users
+   - Tests catch regressions (e.g., plain text leaking into JSON mode)
+
+4. **Example Changes Requiring Documentation**:
+   - Adding new fields to top-level object or disk objects
+   - Changing status values or meanings
+   - Adding/removing fields from `raid_status`
+   - Modifying attribute structure
+   - Changing exit code mappings
+
+5. **Verification Checklist**:
+   - [ ] `docs/JSON_API.md` updated with new fields/values
+   - [ ] Tests added/updated in `tests/test_output_formatter.c`
+   - [ ] Example JSON in docs matches actual output
+   - [ ] `make tests` passes
+   - [ ] Version history table updated if breaking change
 
 ## License
 
