@@ -12,9 +12,8 @@
 
 const char* disk_status_string(disk_health_status_t status) {
     switch (status) {
-        case DISK_STATUS_GOOD:     return "GOOD";
-        case DISK_STATUS_WARNING:  return "WARNING";
-        case DISK_STATUS_CRITICAL: return "CRITICAL";
+        case DISK_STATUS_PASSED:   return "PASSED";
+        case DISK_STATUS_FAILED:   return "FAILED";
         case DISK_STATUS_ERROR:    return "ERROR";
         default:                   return "UNKNOWN";
     }
@@ -22,9 +21,8 @@ const char* disk_status_string(disk_health_status_t status) {
 
 const char* attribute_status_string(attribute_health_status_t status) {
     switch (status) {
-        case ATTR_STATUS_GOOD:     return "OK";
-        case ATTR_STATUS_WARNING:  return "WARNING";
-        case ATTR_STATUS_CRITICAL: return "CRITICAL";
+        case ATTR_STATUS_PASSED:     return "OK";
+        case ATTR_STATUS_FAILED:   return "FAILED";
         case ATTR_STATUS_UNKNOWN:  return "UNKNOWN";
         default:                   return "UNKNOWN";
     }
@@ -100,8 +98,7 @@ void format_summary(const char* device_path, const disk_smart_data_t* disks, int
 
     (void)num_disks;  /* Unused but kept for API consistency */
 
-    int critical_count = 0;
-    int warning_count = 0;
+    int failed_count = 0;
 
     /* Display each disk */
     for (int i = 0; i < 5; i++) {
@@ -160,31 +157,25 @@ void format_summary(const char* device_path, const disk_smart_data_t* disks, int
             printf("  No errors detected\n");
         } else {
             printf("%s", error_msg);
-            if (disks[i].overall_status == DISK_STATUS_WARNING) {
-                printf("  Warning: Disk showing signs of wear\n");
-            } else if (disks[i].overall_status == DISK_STATUS_CRITICAL) {
-                printf("  CRITICAL: Disk may be failing - backup data immediately!\n");
+            if (disks[i].overall_status == DISK_STATUS_FAILED) {
+                printf("  FAILED: Disk may be failing - backup data immediately!\n");
             }
         }
 
         printf("\n");
 
         /* Count for overall status */
-        if (disks[i].overall_status == DISK_STATUS_CRITICAL) {
-            critical_count++;
-        } else if (disks[i].overall_status == DISK_STATUS_WARNING) {
-            warning_count++;
+        if (disks[i].overall_status == DISK_STATUS_FAILED) {
+            failed_count++;
         }
     }
 
     /* Overall RAID health */
     printf("Overall RAID Health: ");
-    if (critical_count > 0) {
-        printf("CRITICAL - Check disk(s) immediately!\n");
-    } else if (warning_count > 0) {
-        printf("WARNING - Monitor disk(s) closely\n");
+    if (failed_count > 0) {
+        printf("FAILED - Check disk(s) immediately!\n");
     } else {
-        printf("GOOD - All disks healthy\n");
+        printf("PASSED - All disks healthy\n");
     }
 }
 
@@ -242,7 +233,7 @@ void format_full_smart(const disk_smart_data_t* disk) {
                attribute_status_string(attr->status));
 
         if (attr->is_critical) {
-            printf(" [CRITICAL]");
+            printf(" [Critical]");
         }
 
         printf("\n");
@@ -258,34 +249,31 @@ void format_full_smart(const disk_smart_data_t* disk) {
 
         if (attr->id == 0x05) {  // Reallocated sectors
             if (attr->raw_value == 0) {
-                printf("  OK: No reallocated sectors\n");
+                printf("  PASSED: No reallocated sectors\n");
             } else {
-                printf("  WARNING: %llu reallocated sectors\n", (unsigned long long)attr->raw_value);
+                printf("  FAILED: %llu reallocated sectors\n", (unsigned long long)attr->raw_value);
                 has_issues = 1;
             }
         } else if (attr->id == 0xC5) {  // Pending sectors
             if (attr->raw_value == 0) {
-                printf("  OK: No pending sectors\n");
+                printf("  PASSED: No pending sectors\n");
             } else {
-                printf("  WARNING: %llu pending sectors\n", (unsigned long long)attr->raw_value);
+                printf("  FAILED: %llu pending sectors\n", (unsigned long long)attr->raw_value);
                 has_issues = 1;
             }
         } else if (attr->id == 0xC6) {  // Uncorrectable sectors
             if (attr->raw_value == 0) {
-                printf("  OK: No uncorrectable sectors\n");
+                printf("  PASSED: No uncorrectable sectors\n");
             } else {
-                printf("  CRITICAL: %llu uncorrectable sectors\n", (unsigned long long)attr->raw_value);
+                printf("  FAILED: %llu uncorrectable sectors\n", (unsigned long long)attr->raw_value);
                 has_issues = 1;
             }
         } else if (attr->id == 0xC2) {  // Temperature
             int temp = (int)(attr->raw_value & 0xFF);
-            if (temp < 50) {
-                printf("  OK: Temperature within normal range (%d°C)\n", temp);
-            } else if (temp < 60) {
-                printf("  WARNING: Temperature elevated (%d°C)\n", temp);
-                has_issues = 1;
+            if (temp < 60) {
+                printf("  PASSED: Temperature within normal range (%d°C)\n", temp);
             } else {
-                printf("  CRITICAL: Temperature too high (%d°C)\n", temp);
+                printf("  FAILED: Temperature too high (%d°C)\n", temp);
                 has_issues = 1;
             }
         }

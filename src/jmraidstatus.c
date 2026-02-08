@@ -385,8 +385,7 @@ static void print_help(const char *program_name)
     printf("  %s --raw /dev/sdc        # Raw hex (original behavior)\n", program_name);
     printf("\nExit codes:\n");
     printf("  0: All disks healthy\n");
-    printf("  1: Warning condition detected\n");
-    printf("  2: Critical condition detected\n");
+    printf("  1: Failed condition detected (or degraded RAID)\n");
     printf("  3: Error (device not found, permission denied, etc.)\n");
 }
 
@@ -484,8 +483,7 @@ static int parse_arguments(int argc, char **argv, cli_options_t *options)
 
 static int determine_exit_code(const disk_smart_data_t *disks, int num_disks)
 {
-    int has_critical = 0;
-    int has_warning = 0;
+    int has_failed = 0;
 
     (void)num_disks; /* Unused but kept for API consistency */
 
@@ -494,19 +492,13 @@ static int determine_exit_code(const disk_smart_data_t *disks, int num_disks)
         if (!disks[i].is_present)
             continue;
 
-        if (disks[i].overall_status == DISK_STATUS_CRITICAL)
+        if (disks[i].overall_status == DISK_STATUS_FAILED)
         {
-            has_critical = 1;
-        }
-        else if (disks[i].overall_status == DISK_STATUS_WARNING)
-        {
-            has_warning = 1;
+            has_failed = 1;
         }
     }
 
-    if (has_critical)
-        return 2;
-    if (has_warning)
+    if (has_failed)
         return 1;
     return 0;
 }
@@ -787,10 +779,10 @@ int main(int argc, char **argv)
     /* Determine exit code based on health status */
     exit_code = determine_exit_code(disk_data, num_disks);
 
-    /* If RAID is degraded and all disks are healthy, return warning exit code */
+    /* If RAID is degraded and all disks are healthy, return failed exit code */
     if (is_degraded && exit_code == 0)
     {
-        exit_code = 1; /* Warning: degraded RAID even though disks are healthy */
+        exit_code = 1; /* Failed: degraded RAID even though disks are healthy */
     }
 
     /* Clean up and restore sector */

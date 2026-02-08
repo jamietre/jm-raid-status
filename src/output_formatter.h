@@ -62,7 +62,7 @@ void format_raw(const uint8_t* data, uint32_t len, const char* label);
  * Get string representation of disk health status
  *
  * @param status Disk health status
- * @return Status string ("GOOD", "WARNING", "CRITICAL", "ERROR")
+ * @return Status string ("PASSED", "FAILED", "ERROR")
  */
 const char* disk_status_string(disk_health_status_t status);
 

@@ -3,4 +3,4 @@ State: OPERATIONAL + REBUILDING_PHASE_1
 0x1F5: 01
 0x1FA: 00
 Raw: 0f 00 2f 00 01 01 00 00 00 80 00 00
-File: operational_rebuilding_phase_1_20260207_215115.txt
+File: operational_rebuilding_phase_1_20260207_231421.txt

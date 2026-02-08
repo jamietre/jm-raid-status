@@ -31,18 +31,16 @@ typedef struct {
 
 /* Health status for individual attributes */
 typedef enum {
-    ATTR_STATUS_GOOD = 0,
-    ATTR_STATUS_WARNING = 1,
-    ATTR_STATUS_CRITICAL = 2,
-    ATTR_STATUS_UNKNOWN = 3
+    ATTR_STATUS_PASSED = 0,
+    ATTR_STATUS_FAILED = 1,
+    ATTR_STATUS_UNKNOWN = 2
 } attribute_health_status_t;
 
 /* Overall disk health status */
 typedef enum {
-    DISK_STATUS_GOOD = 0,
-    DISK_STATUS_WARNING = 1,
-    DISK_STATUS_CRITICAL = 2,
-    DISK_STATUS_ERROR = 3
+    DISK_STATUS_PASSED = 0,
+    DISK_STATUS_FAILED = 1,
+    DISK_STATUS_ERROR = 2
 } disk_health_status_t;
 
 /* Parsed SMART attribute with health assessment */
@@ -131,7 +129,7 @@ int smart_combine_data(int disk_num, const char* disk_name,
 /**
  * Assess health of a single attribute
  * @param attr Parsed attribute with values and threshold
- * @return Health status (GOOD/WARNING/CRITICAL/UNKNOWN)
+ * @return Health status (PASSED/FAILED/UNKNOWN)
  */
 attribute_health_status_t assess_attribute_health(const parsed_smart_attribute_t* attr);
 

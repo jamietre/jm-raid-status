@@ -1629,3 +1629,201 @@ Press Ctrl+C to stop
 [2026-02-07 21:51:15] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_215115.txt)
 [2026-02-07 21:51:15] Check complete
 [2026-02-07 21:51:15] ============================================================
+[2026-02-07 22:00:28] ============================================================
+[2026-02-07 22:00:28] Starting RAID state check
+[2026-02-07 22:00:28] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:00:28] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:00:28] Loaded last state from last_state.txt
+[2026-02-07 22:00:28] Comparison: NO_CHANGE
+[2026-02-07 22:00:28] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_220028.txt
+[2026-02-07 22:00:28] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_215115.txt)
+[2026-02-07 22:00:28] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_220028.txt)
+[2026-02-07 22:00:28] Check complete
+[2026-02-07 22:00:28] ============================================================
+[2026-02-07 22:00:28] ============================================================
+[2026-02-07 22:00:28] Starting RAID state check
+[2026-02-07 22:00:28] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:00:28] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:00:28] Loaded last state from last_state.txt
+[2026-02-07 22:00:28] Comparison: NO_CHANGE
+[2026-02-07 22:00:28] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_220028.txt
+[2026-02-07 22:00:28] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_215115.txt)
+[2026-02-07 22:00:28] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_220028.txt)
+[2026-02-07 22:00:28] Check complete
+[2026-02-07 22:00:28] ============================================================
+[2026-02-07 22:09:43] ============================================================
+[2026-02-07 22:09:43] Starting RAID state check
+[2026-02-07 22:09:43] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:09:43] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:09:43] Loaded last state from last_state.txt
+[2026-02-07 22:09:43] Comparison: NO_CHANGE
+[2026-02-07 22:09:43] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_220943.txt
+[2026-02-07 22:09:43] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_220028.txt)
+[2026-02-07 22:09:43] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_220943.txt)
+[2026-02-07 22:09:43] Check complete
+[2026-02-07 22:09:43] ============================================================
+[2026-02-07 22:09:43] ============================================================
+[2026-02-07 22:09:43] Starting RAID state check
+[2026-02-07 22:09:43] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:09:43] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:09:43] Loaded last state from last_state.txt
+[2026-02-07 22:09:43] Comparison: NO_CHANGE
+[2026-02-07 22:09:43] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_220943.txt
+[2026-02-07 22:09:43] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_220028.txt)
+[2026-02-07 22:09:43] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_220943.txt)
+[2026-02-07 22:09:43] Check complete
+[2026-02-07 22:09:43] ============================================================
+[2026-02-07 22:18:57] ============================================================
+[2026-02-07 22:18:57] Starting RAID state check
+[2026-02-07 22:18:58] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:18:58] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:18:58] Loaded last state from last_state.txt
+[2026-02-07 22:18:58] Comparison: NO_CHANGE
+[2026-02-07 22:18:58] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_221858.txt
+[2026-02-07 22:18:58] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_220943.txt)
+[2026-02-07 22:18:58] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_221858.txt)
+[2026-02-07 22:18:58] Check complete
+[2026-02-07 22:18:58] ============================================================
+[2026-02-07 22:18:57] ============================================================
+[2026-02-07 22:18:57] Starting RAID state check
+[2026-02-07 22:18:58] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:18:58] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:18:58] Loaded last state from last_state.txt
+[2026-02-07 22:18:58] Comparison: NO_CHANGE
+[2026-02-07 22:18:58] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_221858.txt
+[2026-02-07 22:18:58] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_220943.txt)
+[2026-02-07 22:18:58] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_221858.txt)
+[2026-02-07 22:18:58] Check complete
+[2026-02-07 22:18:58] ============================================================
+[2026-02-07 22:28:10] ============================================================
+[2026-02-07 22:28:10] Starting RAID state check
+[2026-02-07 22:28:11] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:28:11] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:28:11] Loaded last state from last_state.txt
+[2026-02-07 22:28:11] Comparison: NO_CHANGE
+[2026-02-07 22:28:11] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_222811.txt
+[2026-02-07 22:28:11] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_221858.txt)
+[2026-02-07 22:28:11] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_222811.txt)
+[2026-02-07 22:28:11] Check complete
+[2026-02-07 22:28:11] ============================================================
+[2026-02-07 22:28:10] ============================================================
+[2026-02-07 22:28:10] Starting RAID state check
+[2026-02-07 22:28:11] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:28:11] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:28:11] Loaded last state from last_state.txt
+[2026-02-07 22:28:11] Comparison: NO_CHANGE
+[2026-02-07 22:28:11] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_222811.txt
+[2026-02-07 22:28:11] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_221858.txt)
+[2026-02-07 22:28:11] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_222811.txt)
+[2026-02-07 22:28:11] Check complete
+[2026-02-07 22:28:11] ============================================================
+[2026-02-07 22:37:24] ============================================================
+[2026-02-07 22:37:24] Starting RAID state check
+[2026-02-07 22:37:24] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:37:24] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:37:24] Loaded last state from last_state.txt
+[2026-02-07 22:37:24] Comparison: NO_CHANGE
+[2026-02-07 22:37:24] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_223724.txt
+[2026-02-07 22:37:24] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_222811.txt)
+[2026-02-07 22:37:24] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_223724.txt)
+[2026-02-07 22:37:24] Check complete
+[2026-02-07 22:37:24] ============================================================
+[2026-02-07 22:37:24] ============================================================
+[2026-02-07 22:37:24] Starting RAID state check
+[2026-02-07 22:37:24] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:37:24] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:37:24] Loaded last state from last_state.txt
+[2026-02-07 22:37:24] Comparison: NO_CHANGE
+[2026-02-07 22:37:24] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_223724.txt
+[2026-02-07 22:37:24] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_222811.txt)
+[2026-02-07 22:37:24] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_223724.txt)
+[2026-02-07 22:37:24] Check complete
+[2026-02-07 22:37:24] ============================================================
+[2026-02-07 22:46:38] ============================================================
+[2026-02-07 22:46:38] Starting RAID state check
+[2026-02-07 22:46:39] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:46:39] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:46:39] Loaded last state from last_state.txt
+[2026-02-07 22:46:39] Comparison: NO_CHANGE
+[2026-02-07 22:46:39] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_224639.txt
+[2026-02-07 22:46:39] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_223724.txt)
+[2026-02-07 22:46:39] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_224639.txt)
+[2026-02-07 22:46:39] Check complete
+[2026-02-07 22:46:39] ============================================================
+[2026-02-07 22:46:38] ============================================================
+[2026-02-07 22:46:38] Starting RAID state check
+[2026-02-07 22:46:39] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:46:39] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:46:39] Loaded last state from last_state.txt
+[2026-02-07 22:46:39] Comparison: NO_CHANGE
+[2026-02-07 22:46:39] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_224639.txt
+[2026-02-07 22:46:39] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_223724.txt)
+[2026-02-07 22:46:39] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_224639.txt)
+[2026-02-07 22:46:39] Check complete
+[2026-02-07 22:46:39] ============================================================
+[2026-02-07 22:55:53] ============================================================
+[2026-02-07 22:55:53] Starting RAID state check
+[2026-02-07 22:55:53] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:55:53] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:55:53] Loaded last state from last_state.txt
+[2026-02-07 22:55:53] Comparison: NO_CHANGE
+[2026-02-07 22:55:53] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_225553.txt
+[2026-02-07 22:55:53] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_224639.txt)
+[2026-02-07 22:55:53] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_225553.txt)
+[2026-02-07 22:55:53] Check complete
+[2026-02-07 22:55:53] ============================================================
+[2026-02-07 22:55:53] ============================================================
+[2026-02-07 22:55:53] Starting RAID state check
+[2026-02-07 22:55:53] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 22:55:53] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 22:55:53] Loaded last state from last_state.txt
+[2026-02-07 22:55:53] Comparison: NO_CHANGE
+[2026-02-07 22:55:53] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_225553.txt
+[2026-02-07 22:55:53] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_224639.txt)
+[2026-02-07 22:55:53] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_225553.txt)
+[2026-02-07 22:55:53] Check complete
+[2026-02-07 22:55:53] ============================================================
+[2026-02-07 23:05:08] ============================================================
+[2026-02-07 23:05:08] Starting RAID state check
+[2026-02-07 23:05:08] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 23:05:08] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 23:05:08] Loaded last state from last_state.txt
+[2026-02-07 23:05:08] Comparison: NO_CHANGE
+[2026-02-07 23:05:08] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_230508.txt
+[2026-02-07 23:05:08] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_225553.txt)
+[2026-02-07 23:05:08] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_230508.txt)
+[2026-02-07 23:05:08] Check complete
+[2026-02-07 23:05:08] ============================================================
+[2026-02-07 23:05:08] ============================================================
+[2026-02-07 23:05:08] Starting RAID state check
+[2026-02-07 23:05:08] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 23:05:08] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 23:05:08] Loaded last state from last_state.txt
+[2026-02-07 23:05:08] Comparison: NO_CHANGE
+[2026-02-07 23:05:08] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_230508.txt
+[2026-02-07 23:05:08] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_225553.txt)
+[2026-02-07 23:05:08] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_230508.txt)
+[2026-02-07 23:05:08] Check complete
+[2026-02-07 23:05:08] ============================================================
+[2026-02-07 23:14:21] ============================================================
+[2026-02-07 23:14:21] Starting RAID state check
+[2026-02-07 23:14:21] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 23:14:21] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 23:14:21] Loaded last state from last_state.txt
+[2026-02-07 23:14:21] Comparison: NO_CHANGE
+[2026-02-07 23:14:21] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_231421.txt
+[2026-02-07 23:14:21] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_230508.txt)
+[2026-02-07 23:14:21] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_231421.txt)
+[2026-02-07 23:14:21] Check complete
+[2026-02-07 23:14:21] ============================================================
+[2026-02-07 23:14:21] ============================================================
+[2026-02-07 23:14:21] Starting RAID state check
+[2026-02-07 23:14:21] Current state: OPERATIONAL + REBUILDING_PHASE_1
+[2026-02-07 23:14:21] Flags: 0x1F0=0f, 0x1F5=01, 0x1FA=00
+[2026-02-07 23:14:21] Loaded last state from last_state.txt
+[2026-02-07 23:14:21] Comparison: NO_CHANGE
+[2026-02-07 23:14:21] State saved to: /home/jamiet/code/jm-raid-status/tools/monitor/states/operational_rebuilding_phase_1_20260207_231421.txt
+[2026-02-07 23:14:21] Last state: OPERATIONAL + REBUILDING_PHASE_1 (from operational_rebuilding_phase_1_20260207_230508.txt)
+[2026-02-07 23:14:21] Current state: OPERATIONAL + REBUILDING_PHASE_1 (saved to operational_rebuilding_phase_1_20260207_231421.txt)
+[2026-02-07 23:14:21] Check complete
+[2026-02-07 23:14:21] ============================================================

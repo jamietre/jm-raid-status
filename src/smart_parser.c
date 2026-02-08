@@ -52,50 +52,36 @@ attribute_health_status_t assess_attribute_health(const parsed_smart_attribute_t
     if (attr->id == 0xC2 || attr->id == 0xBE || attr->id == 0xE7) {
         uint8_t temp = (uint8_t)attr->raw_value;  // Temperature is in lowest byte
         if (temp >= 60) {
-            return ATTR_STATUS_CRITICAL;
-        } else if (temp >= 50) {
-            return ATTR_STATUS_WARNING;
+            return ATTR_STATUS_FAILED;
         }
-        return ATTR_STATUS_GOOD;
+        return ATTR_STATUS_PASSED;
     }
 
-    /* Critical attributes with non-zero raw values are problems */
+    /* Critical attributes with non-zero raw values indicate failure */
     if (attr->is_critical) {
-        /* Reallocated sectors, pending sectors, uncorrectable sectors */
-        if (attr->id == 0x05 || attr->id == 0xC5 || attr->id == 0xC6 ||
-            attr->id == 0xBB || attr->id == 0xB8) {
-            if (attr->raw_value > 0) {
-                /* Pending sectors are warnings, actual bad sectors are critical */
-                if (attr->id == 0xC5) {
-                    return ATTR_STATUS_WARNING;
-                }
-                return ATTR_STATUS_CRITICAL;
-            }
+        /* Reallocated/pending/uncorrectable sectors */
+        if ((attr->id == 0x05 || attr->id == 0xC5 || attr->id == 0xC6 ||
+             attr->id == 0xBB || attr->id == 0xB8) && attr->raw_value > 0) {
+            return ATTR_STATUS_FAILED;
         }
 
-        /* Spin retry count - even one is bad */
+        /* Spin retry count */
         if (attr->id == 0x0A && attr->raw_value > 0) {
-            return ATTR_STATUS_CRITICAL;
+            return ATTR_STATUS_FAILED;
         }
 
-        /* Reallocation event count - warnings */
+        /* Reallocation event count */
         if (attr->id == 0xC4 && attr->raw_value > 0) {
-            return ATTR_STATUS_WARNING;
+            return ATTR_STATUS_FAILED;
         }
     }
 
-    /* Check current value against threshold */
-    if (attr->threshold > 0) {
-        if (attr->current_value <= attr->threshold) {
-            /* At or below threshold is critical */
-            return ATTR_STATUS_CRITICAL;
-        } else if (attr->current_value <= attr->threshold + 10) {
-            /* Within 10 of threshold is warning */
-            return ATTR_STATUS_WARNING;
-        }
+    /* Check current value against manufacturer threshold */
+    if (attr->threshold > 0 && attr->current_value <= attr->threshold) {
+        return ATTR_STATUS_FAILED;
     }
 
-    return ATTR_STATUS_GOOD;
+    return ATTR_STATUS_PASSED;
 }
 
 disk_health_status_t assess_overall_health(disk_smart_data_t* data) {
@@ -103,18 +89,15 @@ disk_health_status_t assess_overall_health(disk_smart_data_t* data) {
         return DISK_STATUS_ERROR;
     }
 
-    disk_health_status_t overall = DISK_STATUS_GOOD;
+    disk_health_status_t overall = DISK_STATUS_PASSED;
 
-    /* Check each attribute and take the worst status */
+    /* Check each attribute - any failure means disk has failed */
     for (int i = 0; i < data->num_attributes; i++) {
         attribute_health_status_t attr_status = assess_attribute_health(&data->attributes[i]);
         data->attributes[i].status = attr_status;
 
-        /* Update overall status to worst seen */
-        if (attr_status == ATTR_STATUS_CRITICAL) {
-            overall = DISK_STATUS_CRITICAL;
-        } else if (attr_status == ATTR_STATUS_WARNING && overall == DISK_STATUS_GOOD) {
-            overall = DISK_STATUS_WARNING;
+        if (attr_status == ATTR_STATUS_FAILED) {
+            overall = DISK_STATUS_FAILED;
         }
     }
 
