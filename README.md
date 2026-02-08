@@ -153,6 +153,19 @@ sudo jmraidstatus --array-size 4 /dev/sdc
 # Exits with code 1 if fewer than 4 disks detected
 ```
 
+**Use custom SMART thresholds:**
+
+```bash
+# Generate default config file
+sudo jmraidstatus --write-default-config /etc/jmraidstatus.json
+
+# Edit the config to customize thresholds
+sudo nano /etc/jmraidstatus.json
+
+# Run with custom config
+sudo jmraidstatus --config /etc/jmraidstatus.json /dev/sdc
+```
+
 ### Exit Codes
 
 - `0` - All disks healthy
@@ -250,6 +263,51 @@ The tool evaluates disk health using these criteria:
 - All attributes above thresholds
 - No critical errors
 - Temperature normal
+
+### Custom SMART Thresholds
+
+You can customize the health assessment thresholds using a configuration file:
+
+**Generate default config:**
+```bash
+sudo jmraidstatus --write-default-config /etc/jmraidstatus.json
+```
+
+**Example config file:**
+```json
+{
+  "use_manufacturer_thresholds": true,
+  "temperature": {
+    "critical": 60
+  },
+  "attributes": {
+    "0x05": {
+      "name": "Reallocated Sector Count",
+      "raw_critical": 0
+    },
+    "0xC5": {
+      "name": "Current Pending Sector Count",
+      "raw_critical": 5
+    }
+  }
+}
+```
+
+**Configuration options:**
+- `use_manufacturer_thresholds`: If `true`, also check drive's built-in thresholds (default: `true`)
+- `temperature.critical`: Temperature in °C to consider critical (default: 60)
+- `attributes.0xNN.raw_critical`: Fail if attribute raw value exceeds this threshold
+
+**Use custom config:**
+```bash
+sudo jmraidstatus --config /etc/jmraidstatus.json /dev/sdc
+```
+
+This allows you to:
+- Accept a small number of reallocated sectors as normal wear
+- Customize temperature thresholds for your environment
+- Disable manufacturer thresholds if they're too conservative
+- Add custom thresholds for specific SMART attributes
 
 ### RAID Array Monitoring
 

@@ -14,6 +14,7 @@
 #include "jm_commands.h"
 #include "smart_parser.h"
 #include "output_formatter.h"
+#include "config.h"
 
 #define VERSION "1.0"
 #define DEFAULT_SECTOR 1024 /* Was 0x21 (33) in original - changed to 1024 for safety */
@@ -30,6 +31,8 @@ typedef struct
     int dump_raw; // Dump raw protocol data
     uint32_t sector;
     int expected_array_size; // Expected number of disks (0 = not specified)
+    char config_path[256]; // Path to config file (empty = use defaults)
+    char write_default_config_path[256]; // If set, write default config and exit
 } cli_options_t;
 
 /* Check if we're running in WSL */
@@ -381,6 +384,8 @@ static void print_help(const char *program_name)
     printf("  --force                 Skip hardware detection (use with caution)\n");
     printf("  --sector SECTOR         Use specific sector number (default: %u)\n", DEFAULT_SECTOR);
     printf("  --array-size N          Expected number of disks (fail if mismatch detected)\n");
+    printf("  --config PATH           Load custom SMART threshold configuration\n");
+    printf("  --write-default-config PATH  Write default config file and exit\n");
     printf("\nExamples:\n");
     printf("  %s /dev/sdc              # Show summary for all disks\n", program_name);
     printf("  %s -d 0 -f /dev/sdc      # Full SMART table for disk 0\n", program_name);
@@ -403,6 +408,8 @@ static int parse_arguments(int argc, char **argv, cli_options_t *options)
     options->output_mode = OUTPUT_MODE_SUMMARY;
     options->sector = DEFAULT_SECTOR;
     options->expected_array_size = 0; // Not specified
+    options->config_path[0] = '\0'; // No config file
+    options->write_default_config_path[0] = '\0'; // Not writing config
 
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -418,6 +425,8 @@ static int parse_arguments(int argc, char **argv, cli_options_t *options)
         {"force", no_argument, 0, 'F'},
         {"sector", required_argument, 0, 'S'},
         {"array-size", required_argument, 0, 'A'},
+        {"config", required_argument, 0, 'C'},
+        {"write-default-config", required_argument, 0, 'W'},
         {0, 0, 0, 0}};
 
     while ((opt = getopt_long(argc, argv, "hvd:asfjqrV", long_options, &option_index)) != -1)
@@ -475,21 +484,36 @@ static int parse_arguments(int argc, char **argv, cli_options_t *options)
                 return -1;
             }
             break;
+        case 'C':
+            strncpy(options->config_path, optarg, sizeof(options->config_path) - 1);
+            options->config_path[sizeof(options->config_path) - 1] = '\0';
+            break;
+        case 'W':
+            strncpy(options->write_default_config_path, optarg, sizeof(options->write_default_config_path) - 1);
+            options->write_default_config_path[sizeof(options->write_default_config_path) - 1] = '\0';
+            break;
         default:
             return -1;
         }
     }
 
-    /* Get device path */
+    /* Get device path (not required for --write-default-config) */
     if (optind >= argc)
     {
-        fprintf(stderr, "Error: Device path required\n\n");
-        print_help(argv[0]);
-        return -1;
+        if (options->write_default_config_path[0] == '\0')
+        {
+            fprintf(stderr, "Error: Device path required\n\n");
+            print_help(argv[0]);
+            return -1;
+        }
+        /* --write-default-config doesn't need device path */
+        options->device_path[0] = '\0';
     }
-
-    strncpy(options->device_path, argv[optind], sizeof(options->device_path) - 1);
-    options->device_path[sizeof(options->device_path) - 1] = '\0';
+    else
+    {
+        strncpy(options->device_path, argv[optind], sizeof(options->device_path) - 1);
+        options->device_path[sizeof(options->device_path) - 1] = '\0';
+    }
 
     return 0;
 }
@@ -531,6 +555,38 @@ int main(int argc, char **argv)
     {
         return 3;
     }
+
+    /* Handle --write-default-config (write config and exit) */
+    if (options.write_default_config_path[0] != '\0')
+    {
+        return (config_write_default(options.write_default_config_path) == 0) ? 0 : 3;
+    }
+
+    /* Load config if specified, otherwise use defaults */
+    smart_config_t config;
+    if (options.config_path[0] != '\0')
+    {
+        if (config_load(options.config_path, &config) != 0)
+        {
+            if (!options.quiet)
+            {
+                fprintf(stderr, "Error: Failed to load config from %s\n", options.config_path);
+            }
+            return 3;
+        }
+        if (options.verbose)
+        {
+            printf("Loaded config from: %s\n", options.config_path);
+        }
+    }
+    else
+    {
+        /* No config file specified - use defaults */
+        config_init_default(&config);
+    }
+
+    /* Set global config for SMART assessment */
+    smart_set_config(&config);
 
     /* Validate sector is in safe range */
     if (!is_sector_in_safe_range(options.sector))
@@ -802,6 +858,9 @@ int main(int argc, char **argv)
             fprintf(stderr, "Warning: Failed to restore original sector data\n");
         }
     }
+
+    /* Free config resources */
+    config_free(&config);
 
     return exit_code;
 }

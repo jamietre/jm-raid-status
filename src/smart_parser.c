@@ -10,6 +10,17 @@
 #include <string.h>
 #include <stdio.h>
 
+/* Global configuration singleton */
+static const smart_config_t* g_smart_config = NULL;
+
+void smart_set_config(const smart_config_t* config) {
+    g_smart_config = config;
+}
+
+const smart_config_t* smart_get_config(void) {
+    return g_smart_config;
+}
+
 uint64_t smart_raw_value_to_uint64(const uint8_t* raw_value) {
     uint64_t result = 0;
 
@@ -48,16 +59,42 @@ attribute_health_status_t assess_attribute_health(const parsed_smart_attribute_t
         return ATTR_STATUS_UNKNOWN;
     }
 
+    /* Get global config */
+    const smart_config_t* config = smart_get_config();
+
+    /* Check config for custom threshold on this attribute */
+    if (config != NULL && config->attributes != NULL) {
+        for (int i = 0; i < config->num_attributes; i++) {
+            if (config->attributes[i].id == attr->id) {
+                /* Found custom threshold for this attribute */
+                if (config->attributes[i].has_raw_critical) {
+                    if (attr->raw_value > config->attributes[i].raw_critical) {
+                        return ATTR_STATUS_FAILED;
+                    }
+                    /* Custom threshold passed, continue to other checks */
+                }
+            }
+        }
+    }
+
     /* Special handling for temperature (0xC2, 0xBE, 0xE7) */
     if (attr->id == 0xC2 || attr->id == 0xBE || attr->id == 0xE7) {
         uint8_t temp = (uint8_t)attr->raw_value;  // Temperature is in lowest byte
-        if (temp >= 60) {
+        uint8_t temp_threshold = 60;  // Default
+
+        /* Use config temperature threshold if specified */
+        if (config != NULL && config->has_temp_critical) {
+            temp_threshold = config->temp_critical;
+        }
+
+        if (temp >= temp_threshold) {
             return ATTR_STATUS_FAILED;
         }
         return ATTR_STATUS_PASSED;
     }
 
-    /* Critical attributes with non-zero raw values indicate failure */
+    /* Critical attributes with non-zero raw values indicate failure
+     * (only if no custom threshold was set for this attribute) */
     if (attr->is_critical) {
         /* Reallocated/pending/uncorrectable sectors */
         if ((attr->id == 0x05 || attr->id == 0xC5 || attr->id == 0xC6 ||
@@ -76,9 +113,11 @@ attribute_health_status_t assess_attribute_health(const parsed_smart_attribute_t
         }
     }
 
-    /* Check current value against manufacturer threshold */
-    if (attr->threshold > 0 && attr->current_value <= attr->threshold) {
-        return ATTR_STATUS_FAILED;
+    /* Check current value against manufacturer threshold (if enabled in config) */
+    if (config == NULL || config->use_manufacturer_thresholds) {
+        if (attr->threshold > 0 && attr->current_value <= attr->threshold) {
+            return ATTR_STATUS_FAILED;
+        }
     }
 
     return ATTR_STATUS_PASSED;

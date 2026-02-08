@@ -31,8 +31,8 @@ Thumbs.db
 *.tmp
 *.bak
 *.orig
+*.log
 .env
-.log
 tools/monitor/states
 investigation/data/archive
 

@@ -9,6 +9,7 @@
 #define SMART_PARSER_H
 
 #include <stdint.h>
+#include "config.h"
 
 #define MAX_SMART_ATTRIBUTES 30
 
@@ -128,6 +129,7 @@ int smart_combine_data(int disk_num, const char* disk_name,
 
 /**
  * Assess health of a single attribute
+ * Uses global config set via smart_set_config()
  * @param attr Parsed attribute with values and threshold
  * @return Health status (PASSED/FAILED/UNKNOWN)
  */
@@ -135,6 +137,7 @@ attribute_health_status_t assess_attribute_health(const parsed_smart_attribute_t
 
 /**
  * Assess overall disk health based on all attributes
+ * Uses global config set via smart_set_config()
  * @param data Disk SMART data with parsed attributes
  * @return Overall disk health status
  */
@@ -146,5 +149,18 @@ disk_health_status_t assess_overall_health(disk_smart_data_t* data);
  * @return 64-bit integer value
  */
 uint64_t smart_raw_value_to_uint64(const uint8_t* raw_value);
+
+/**
+ * Set global SMART configuration (singleton)
+ * Call once at program startup after loading config
+ * @param config Pointer to config structure (must remain valid for program lifetime)
+ */
+void smart_set_config(const smart_config_t* config);
+
+/**
+ * Get global SMART configuration
+ * @return Pointer to current config, or NULL if not set
+ */
+const smart_config_t* smart_get_config(void);
 
 #endif /* SMART_PARSER_H */
