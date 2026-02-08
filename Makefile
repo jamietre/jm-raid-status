@@ -66,4 +66,20 @@ $(TESTBINDIR):
 clean-tests:
 	-rm -rf $(TESTBINDIR)
 
-.PHONY: all clean install tests clean-tests
+# Utility tools
+TOOLSDIR = tools
+TOOLSBINDIR = $(BINDIR)/tools
+
+tools: $(TOOLSBINDIR)/zero_sector
+
+$(TOOLSBINDIR)/zero_sector: $(TOOLSDIR)/zero_sector.c | $(TOOLSBINDIR)
+	$(CC) $(CFLAGS) $< -o $@
+	@echo "Built: $@"
+
+$(TOOLSBINDIR):
+	@mkdir -p $(TOOLSBINDIR)
+
+clean-tools:
+	-rm -rf $(TOOLSBINDIR)
+
+.PHONY: all clean install tests clean-tests tools clean-tools

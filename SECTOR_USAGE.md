@@ -249,6 +249,48 @@ HD Sentinel also uses this protocol but:
 - **Used successfully** on most systems but failed catastrophically in one case
 - **Different implementation** but same underlying protocol
 
+## Emergency Recovery: Cleaning Up a Stuck Sector
+
+If jmraidstatus was interrupted (crash, SIGKILL, power loss) before completing cleanup, the communication sector may still contain protocol data. The tool will then refuse to run with an error message:
+
+```
+ERROR: Sector 1024 is not empty (contains data).
+This tool requires an empty sector for communication.
+Refusing to overwrite existing data for safety.
+```
+
+### Using the zero_sector Recovery Tool
+
+The `zero_sector` utility can manually clean up the communication sector:
+
+```bash
+# Build the recovery tool
+make tools
+
+# Clean up the stuck sector (requires sudo)
+sudo bin/tools/zero_sector /dev/sdX 1024
+```
+
+**What it does:**
+- Overwrites the specified sector with zeros
+- Requires explicit "yes" confirmation
+- Validates sector number (refuses sector 0 or < 64)
+- Safely restores the sector to empty state
+
+**When to use:**
+- ✅ jmraidstatus was interrupted and left data in the communication sector
+- ✅ You verified the sector should be empty (in the partition gap)
+- ✅ Tool refuses to run because sector contains data from previous failed attempt
+
+**When NOT to use:**
+- ❌ The sector contains actual partition or filesystem data
+- ❌ You're not sure which sector was used (check with `--sector` flag)
+- ❌ As a routine cleanup (normal cleanup is automatic)
+
+**Safety:** This tool is for **emergency recovery only**. It can overwrite any sector, so always verify you're using the correct device and sector number before confirming.
+
+See `tools/README.md` for complete documentation.
+
 ## Recommendations
 
 1. ✅ **Always have backups** before using this tool
