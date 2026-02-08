@@ -27,7 +27,9 @@ typedef struct
     int verbose;
     int quiet;
     int force; // Skip hardware detection
+    int dump_raw; // Dump raw protocol data
     uint32_t sector;
+    int expected_array_size; // Expected number of disks (0 = not specified)
 } cli_options_t;
 
 /* Check if we're running in WSL */
@@ -373,11 +375,12 @@ static void print_help(const char *program_name)
     printf("  -s, --summary           Show summary only (default)\n");
     printf("  -f, --full              Show full SMART attribute table\n");
     printf("  -j, --json              Output in JSON format\n");
-    printf("  -r, --raw               Show raw hex output (backward compatibility)\n");
+    printf("  -r, --raw               Dump raw protocol data to stderr (debug mode)\n");
     printf("  -q, --quiet             Minimal output (exit code only)\n");
     printf("  --verbose               Verbose output with debug info\n");
     printf("  --force                 Skip hardware detection (use with caution)\n");
     printf("  --sector SECTOR         Use specific sector number (default: %u)\n", DEFAULT_SECTOR);
+    printf("  --array-size N          Expected number of disks (fail if mismatch detected)\n");
     printf("\nExamples:\n");
     printf("  %s /dev/sdc              # Show summary for all disks\n", program_name);
     printf("  %s -d 0 -f /dev/sdc      # Full SMART table for disk 0\n", program_name);
@@ -399,6 +402,7 @@ static int parse_arguments(int argc, char **argv, cli_options_t *options)
     options->disk_number = -1; // All disks
     options->output_mode = OUTPUT_MODE_SUMMARY;
     options->sector = DEFAULT_SECTOR;
+    options->expected_array_size = 0; // Not specified
 
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -413,6 +417,7 @@ static int parse_arguments(int argc, char **argv, cli_options_t *options)
         {"verbose", no_argument, 0, 'V'},
         {"force", no_argument, 0, 'F'},
         {"sector", required_argument, 0, 'S'},
+        {"array-size", required_argument, 0, 'A'},
         {0, 0, 0, 0}};
 
     while ((opt = getopt_long(argc, argv, "hvd:asfjqrV", long_options, &option_index)) != -1)
@@ -448,7 +453,7 @@ static int parse_arguments(int argc, char **argv, cli_options_t *options)
             options->output_mode = OUTPUT_MODE_JSON;
             break;
         case 'r':
-            options->output_mode = OUTPUT_MODE_RAW;
+            options->dump_raw = 1;
             break;
         case 'q':
             options->quiet = 1;
@@ -461,6 +466,14 @@ static int parse_arguments(int argc, char **argv, cli_options_t *options)
             break;
         case 'S':
             options->sector = strtoul(optarg, NULL, 0);
+            break;
+        case 'A':
+            options->expected_array_size = atoi(optarg);
+            if (options->expected_array_size < 1 || options->expected_array_size > 5)
+            {
+                fprintf(stderr, "Error: Array size must be 1-5\n");
+                return -1;
+            }
             break;
         default:
             return -1;
@@ -588,13 +601,10 @@ int main(int argc, char **argv)
         printf("Skipping hardware detection (--force used).\n");
     }
 
-    /* Show version banner unless quiet mode */
+    /* Show version banner unless quiet mode or JSON mode */
     if (!options.quiet && options.output_mode != OUTPUT_MODE_JSON)
     {
-        if (options.output_mode != OUTPUT_MODE_RAW)
-        {
-            /* Summary and full modes get minimal banner */
-        }
+        /* Summary and full modes get minimal banner */
     }
 
     /* Initialize device */
@@ -684,7 +694,7 @@ int main(int argc, char **argv)
         }
 
         result = jm_get_disk_smart_data(fd, options.disk_number, NULL,
-                                        &disk_data[options.disk_number], options.sector);
+                                        &disk_data[options.disk_number], options.sector, options.dump_raw);
         if (result == 0)
         {
             num_disks = 1;
@@ -708,7 +718,7 @@ int main(int argc, char **argv)
             printf("Querying all disks...\n");
         }
 
-        result = jm_get_all_disks_smart_data(fd, disk_data, &num_disks, options.sector, &is_degraded);
+        result = jm_get_all_disks_smart_data(fd, disk_data, &num_disks, options.sector, &is_degraded, options.dump_raw, options.expected_array_size);
         if (result != 0)
         {
             if (!options.quiet)
@@ -765,13 +775,6 @@ int main(int argc, char **argv)
 
         case OUTPUT_MODE_JSON:
             format_json(options.device_path, disk_data, num_disks);
-            break;
-
-        case OUTPUT_MODE_RAW:
-            /* This mode would need raw data - not implemented in new architecture
-             * Fall back to showing that raw mode requires original code */
-            fprintf(stderr, "Raw mode not available in this version.\n");
-            fprintf(stderr, "Use --full mode for detailed attribute display.\n");
             break;
         }
     }

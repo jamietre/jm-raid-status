@@ -22,9 +22,11 @@
  * @param firmware Output buffer for firmware revision (8 bytes minimum)
  * @param size_mb Output pointer for disk size in MB (can be NULL)
  * @param sector Sector number for communication
+ * @param dump_raw If non-zero, dump raw protocol data to stderr
+ * @param disk_bitmask Output pointer for disk presence bitmask from 0x1F0 (can be NULL)
  * @return 0 on success, -1 on error, -2 on empty slot
  */
-int jm_get_disk_identify(int fd, int disk_num, char* model, char* serial, char* firmware, uint64_t* size_mb, uint32_t sector);
+int jm_get_disk_identify(int fd, int disk_num, char* model, char* serial, char* firmware, uint64_t* size_mb, uint32_t sector, int dump_raw, uint8_t* disk_bitmask);
 
 /**
  * Read disk names from RAID controller (deprecated - use jm_get_disk_identify)
@@ -45,9 +47,10 @@ int jm_get_disk_names(int fd, char disk_names[5][64], uint32_t sector);
  * @param disk_num Disk number (0-4)
  * @param values Output SMART values structure
  * @param sector Sector number for communication
+ * @param dump_raw If non-zero, dump raw protocol data to stderr
  * @return 0 on success, -1 on error
  */
-int jm_smart_read_values(int fd, int disk_num, smart_values_page_t* values, uint32_t sector);
+int jm_smart_read_values(int fd, int disk_num, smart_values_page_t* values, uint32_t sector, int dump_raw);
 
 /**
  * Read SMART attribute thresholds for a disk
@@ -69,10 +72,11 @@ int jm_smart_read_thresholds(int fd, int disk_num, smart_thresholds_page_t* thre
  * @param disk_name Disk model name (can be NULL)
  * @param data Output complete SMART data with health assessment
  * @param sector Sector number for communication
+ * @param dump_raw If non-zero, dump raw protocol data to stderr
  * @return 0 on success, -1 on error
  */
 int jm_get_disk_smart_data(int fd, int disk_num, const char* disk_name,
-                            disk_smart_data_t* data, uint32_t sector);
+                            disk_smart_data_t* data, uint32_t sector, int dump_raw);
 
 /**
  * Get SMART data for all disks in the array
@@ -82,8 +86,10 @@ int jm_get_disk_smart_data(int fd, int disk_num, const char* disk_name,
  * @param num_disks Output number of disks found
  * @param sector Sector number for communication
  * @param is_degraded Optional output: set to 1 if degraded RAID detected, 0 otherwise (can be NULL)
+ * @param dump_raw If non-zero, dump raw protocol data to stderr
+ * @param expected_array_size Expected number of disks (0 = auto-detect, no validation)
  * @return 0 on success, -1 on error
  */
-int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disks, uint32_t sector, int* is_degraded);
+int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disks, uint32_t sector, int* is_degraded, int dump_raw, int expected_array_size);
 
 #endif /* JM_COMMANDS_H */

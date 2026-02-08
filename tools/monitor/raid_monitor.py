@@ -104,10 +104,11 @@ def extract_flags(raw_output):
         return None
 
     flags = {
-        "0x1F0": hex_bytes[0],  # RAID health status
+        "0x1F0": hex_bytes[0],  # Disk presence bitmask (bit N = disk N present)
         "0x1F2": hex_bytes[2],  # Unknown
-        "0x1F5": hex_bytes[5],  # Rebuild status
-        "0x1FA": hex_bytes[10] if len(hex_bytes) > 10 else "??",  # Rebuild phase
+        "0x1F5": hex_bytes[5],  # Rebuild status (0x00=normal, 0x01=rebuilding)
+        "0x1F9": hex_bytes[9] if len(hex_bytes) > 9 else "??",  # Unknown "dirty bit" (0x80=set, 0x00=clear)
+        "0x1FA": hex_bytes[10] if len(hex_bytes) > 10 else "??",  # Unknown
         "raw": " ".join(hex_bytes[:12]) if len(hex_bytes) >= 12 else " ".join(hex_bytes),
         "num_disks": len(matches)
     }
@@ -132,14 +133,9 @@ def interpret_state(flags):
 
     # Rebuild status
     if flags["0x1F5"] == "01":
-        if flags["0x1FA"] == "00":
-            state_parts.append("REBUILDING_PHASE_1")
-        elif flags["0x1FA"] == "01":
-            state_parts.append("REBUILDING_PHASE_2")
-        else:
-            state_parts.append(f"REBUILDING_UNKNOWN_PHASE({flags['0x1FA']})")
+        state_parts.append("REBUILDING")
     elif flags["0x1F5"] == "00":
-        state_parts.append("IDLE")
+        state_parts.append("NOT_REBUILDING")
     else:
         state_parts.append(f"UNKNOWN_REBUILD({flags['0x1F5']})")
 
@@ -158,7 +154,8 @@ def save_state_file(raw_output, flags, state_name):
         f.write(f"\nFlags:\n")
         f.write(f"  0x1F0 (Health):  {flags['0x1F0']}\n")
         f.write(f"  0x1F5 (Rebuild): {flags['0x1F5']}\n")
-        f.write(f"  0x1FA (Phase):   {flags['0x1FA']}\n")
+        f.write(f"  0x1F9 (Dirty?):  {flags['0x1F9']}\n")
+        f.write(f"  0x1FA (Unknown): {flags['0x1FA']}\n")
         f.write(f"  Raw: {flags['raw']}\n")
         f.write(f"  Disks: {flags['num_disks']}\n")
         f.write(f"\n{'='*60}\n\n")

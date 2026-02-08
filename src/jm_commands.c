@@ -105,7 +105,7 @@ static int validate_identify_response(const uint8_t* response) {
     return 1;  // Looks like a valid disk
 }
 
-int jm_get_disk_identify(int fd, int disk_num, char* model, char* serial, char* firmware, uint64_t* size_mb, uint32_t sector) {
+int jm_get_disk_identify(int fd, int disk_num, char* model, char* serial, char* firmware, uint64_t* size_mb, uint32_t sector, int dump_raw, uint8_t* disk_bitmask) {
     if (disk_num < 0 || disk_num > 4) {
         return -1;
     }
@@ -127,7 +127,7 @@ int jm_get_disk_identify(int fd, int disk_num, char* model, char* serial, char* 
     }
 
     /* Dump raw response if debug mode enabled */
-    if (getenv("JMRAIDSTATUS_DUMP_RAW") != NULL) {
+    if (dump_raw) {
         fprintf(stderr, "\n=== IDENTIFY DISK %d RESPONSE (512 bytes) ===\n", disk_num);
         for (int i = 0; i < 512; i += 16) {
             fprintf(stderr, "%04x: ", i);
@@ -144,16 +144,19 @@ int jm_get_disk_identify(int fd, int disk_num, char* model, char* serial, char* 
         fprintf(stderr, "\n");
     }
 
-    /* Check for degraded RAID status flag at offset 0x1F0
-     * 0x07 = RAID is degraded (one or more disks missing/failed, cannot rebuild)
-     * 0x0F = RAID is operational (all disks present, safe to operate)
-     *        - Includes both healthy AND rebuilding states
-     *        - Controller does not distinguish between them
+    /* Read disk presence bitmask at offset 0x1F0
+     * This is a bitmask where each bit represents a disk slot:
+     *   Bit 0 = disk 0, Bit 1 = disk 1, Bit 2 = disk 2, Bit 3 = disk 3
+     * Examples:
+     *   0x0F (1111b) = All 4 disks present
+     *   0x07 (0111b) = Disks 0,1,2 present (disk 3 missing)
+     *   0x03 (0011b) = Disks 0,1 present
      * This flag appears in ALL disk responses (even empty slots) */
-    uint8_t raid_status = response[0x1F0];
-    if (raid_status == 0x07) {
-        /* Store degraded flag in environment for main code to check */
-        setenv("JMRAIDSTATUS_DEGRADED", "1", 1);
+    uint8_t bitmask_value = response[0x1F0];
+
+    /* Return bitmask to caller if requested */
+    if (disk_bitmask != NULL) {
+        *disk_bitmask = bitmask_value;
     }
 
     /* Command succeeded with valid CRC, now check if response looks like a real disk */
@@ -200,14 +203,14 @@ int jm_get_disk_identify(int fd, int disk_num, char* model, char* serial, char* 
 int jm_get_disk_names(int fd, char disk_names[5][64], uint32_t sector) {
     /* Use IDENTIFY DEVICE to get model names */
     for (int i = 0; i < 5; i++) {
-        if (jm_get_disk_identify(fd, i, disk_names[i], NULL, NULL, NULL, sector) != 0) {
+        if (jm_get_disk_identify(fd, i, disk_names[i], NULL, NULL, NULL, sector, 0, NULL) != 0) {
             memset(disk_names[i], 0, 64);
         }
     }
     return 0;
 }
 
-int jm_smart_read_values(int fd, int disk_num, smart_values_page_t* values, uint32_t sector) {
+int jm_smart_read_values(int fd, int disk_num, smart_values_page_t* values, uint32_t sector, int dump_raw) {
     if (disk_num < 0 || disk_num > 4 || values == NULL) {
         return -1;
     }
@@ -229,7 +232,7 @@ int jm_smart_read_values(int fd, int disk_num, smart_values_page_t* values, uint
     }
 
     /* Dump raw response if debug mode enabled */
-    if (getenv("JMRAIDSTATUS_DUMP_RAW") != NULL) {
+    if (dump_raw) {
         fprintf(stderr, "\n=== SMART VALUES DISK %d RESPONSE (512 bytes) ===\n", disk_num);
         fprintf(stderr, "First 32 bytes are JMicron header/echo:\n");
         for (int i = 0; i < 32; i += 16) {
@@ -282,7 +285,7 @@ int jm_smart_read_thresholds(int fd, int disk_num, smart_thresholds_page_t* thre
 }
 
 int jm_get_disk_smart_data(int fd, int disk_num, const char* disk_name,
-                            disk_smart_data_t* data, uint32_t sector) {
+                            disk_smart_data_t* data, uint32_t sector, int dump_raw) {
     smart_values_page_t values;
     smart_thresholds_page_t thresholds;
 
@@ -291,7 +294,7 @@ int jm_get_disk_smart_data(int fd, int disk_num, const char* disk_name,
     }
 
     /* Read SMART values */
-    if (jm_smart_read_values(fd, disk_num, &values, sector) != 0) {
+    if (jm_smart_read_values(fd, disk_num, &values, sector, dump_raw) != 0) {
         /* Disk may not be present */
         memset(data, 0, sizeof(disk_smart_data_t));
         data->disk_number = disk_num;
@@ -313,10 +316,12 @@ int jm_get_disk_smart_data(int fd, int disk_num, const char* disk_name,
     return smart_combine_data(disk_num, disk_name, &values, &thresholds, data);
 }
 
-int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disks, uint32_t sector, int* is_degraded) {
+int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disks, uint32_t sector, int* is_degraded, int dump_raw, int expected_array_size) {
     int disks_found = 0;
     int verbose = (getenv("JMRAIDSTATUS_VERBOSE") != NULL);
     int degraded = 0;
+    uint8_t disk_bitmask = 0;
+    int bitmask_captured = 0;
 
     if (data == NULL || num_disks == NULL) {
         return -1;
@@ -332,6 +337,7 @@ int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disk
         char serial[21] = {0};
         char firmware[9] = {0};
         uint64_t size_mb = 0;
+        uint8_t bitmask_temp = 0;
 
         if (verbose) {
             fprintf(stderr, "  Probing disk slot %d...\n", i);
@@ -347,7 +353,14 @@ int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disk
          *   0 = disk present and identified successfully
          *  -1 = communication error (CRC failure, etc.) - will have printed warning
          *  -2 = no disk in slot (empty, but communication OK) */
-        int identify_result = jm_get_disk_identify(fd, i, model, serial, firmware, &size_mb, sector);
+        int identify_result = jm_get_disk_identify(fd, i, model, serial, firmware, &size_mb, sector, dump_raw, &bitmask_temp);
+
+        /* Capture disk bitmask from first successful response (even if slot is empty)
+         * The bitmask is the same in all responses, so we only need it once */
+        if (!bitmask_captured && (identify_result == 0 || identify_result == -2)) {
+            disk_bitmask = bitmask_temp;
+            bitmask_captured = 1;
+        }
 
         if (identify_result == -2) {
             /* Empty slot - not an error, just continue */
@@ -368,7 +381,7 @@ int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disk
         }
 
         /* Get SMART data */
-        if (jm_get_disk_smart_data(fd, i, model, &data[i], sector) == 0) {
+        if (jm_get_disk_smart_data(fd, i, model, &data[i], sector, dump_raw) == 0) {
             /* Disk exists and SMART data retrieved successfully - store disk info
              * NOTE: Must do this AFTER jm_get_disk_smart_data because smart_combine_data
              * clears the structure with memset() */
@@ -383,19 +396,30 @@ int jm_get_all_disks_smart_data(int fd, disk_smart_data_t data[5], int* num_disk
 
     *num_disks = disks_found;
 
-    /* Check for degraded RAID using the controller's status flag
-     * The JMicron controller reports RAID degradation at offset 0x1F0 in IDENTIFY responses:
-     *   0x07 = RAID degraded (one or more disks missing/failed)
-     *   0x0F = RAID healthy
-     * This flag is set during jm_get_disk_identify() calls */
-    if (getenv("JMRAIDSTATUS_DEGRADED") != NULL) {
-        degraded = 1;
-        if (verbose) {
-            fprintf(stderr, "\n*** DEGRADED RAID DETECTED (controller flag 0x07) ***\n");
-            fprintf(stderr, "    RAID array is operating in degraded mode\n");
-            fprintf(stderr, "    One or more disks have failed or been removed\n");
-            fprintf(stderr, "    Found %d active disk%s\n", disks_found, disks_found == 1 ? "" : "s");
-            fprintf(stderr, "    CRITICAL: Array has REDUCED or NO redundancy!\n\n");
+    /* Check for degraded RAID using the disk presence bitmask from 0x1F0
+     * The controller reports which disks are present via a bitmask
+     * If expected_array_size is specified, compare actual vs expected */
+    if (expected_array_size > 0 && bitmask_captured) {
+        /* Count the number of present disks using popcount */
+        int present_disks = 0;
+        for (int i = 0; i < 8; i++) {
+            if (disk_bitmask & (1 << i)) {
+                present_disks++;
+            }
+        }
+
+        /* Compare to expected array size */
+        if (present_disks < expected_array_size) {
+            degraded = 1;
+            if (verbose) {
+                fprintf(stderr, "\n*** DEGRADED RAID DETECTED (bitmask 0x%02x) ***\n", disk_bitmask);
+                fprintf(stderr, "    Expected %d disk%s, found %d disk%s present\n",
+                        expected_array_size, expected_array_size == 1 ? "" : "s",
+                        present_disks, present_disks == 1 ? "" : "s");
+                fprintf(stderr, "    RAID array is operating in degraded mode\n");
+                fprintf(stderr, "    One or more disks have failed or been removed\n");
+                fprintf(stderr, "    CRITICAL: Array has REDUCED or NO redundancy!\n\n");
+            }
         }
     }
 

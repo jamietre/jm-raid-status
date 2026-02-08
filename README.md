@@ -97,10 +97,12 @@ jmraidstatus [OPTIONS] /dev/sdX
 - `-s, --summary` - Show summary only (default)
 - `-f, --full` - Show full SMART attribute table
 - `-j, --json` - Output in JSON format
+- `-r, --raw` - Dump raw protocol data to stderr (for debugging/investigation)
 - `-q, --quiet` - Minimal output (exit code only)
 - `--verbose` - Verbose output with debug info
 - `--force` - Skip hardware detection (use if auto-detection fails)
 - `--sector SECTOR` - Use specific sector number (default: 1024, must be empty)
+- `--array-size N` - Expected number of disks (1-5); fail if controller reports fewer disks present
 
 **Note**: For USB-connected RAID enclosures, the tool automatically detects the USB connection and proceeds without additional flags.
 
@@ -142,6 +144,13 @@ sudo jmraidstatus -j /dev/sdc > health.json
 ```bash
 sudo jmraidstatus -q /dev/sdc
 echo $?  # 0=healthy, 1=warning, 2=critical, 3=error
+```
+
+**Check for degraded array (specify expected disk count):**
+
+```bash
+sudo jmraidstatus --array-size 4 /dev/sdc
+# Exits with code 1 if fewer than 4 disks detected
 ```
 
 ### Exit Codes
@@ -226,26 +235,40 @@ jmraidstatus uses Linux SCSI Generic (SG_IO) ioctls to communicate with the RAID
 
 The tool evaluates disk health using these criteria:
 
-**CRITICAL** status if:
+**FAILED** status if:
 
 - Reallocated Sector Count (0x05) > 0
 - Uncorrectable Sector Count (0x06, 0xC6) > 0
+- Current Pending Sector Count (0xC5) > 0
 - Spin Retry Count (0x0A) > 0
-- Any attribute current value ≤ threshold
+- Reallocation Event Count (0xC4) > 0
+- Any attribute current value ≤ manufacturer threshold
 - Temperature ≥ 60°C
 
-**WARNING** status if:
-
-- Current Pending Sector Count (0xC5) > 0
-- Reallocation Event Count (0xC4) > 0
-- Current value within 10 of threshold
-- Temperature ≥ 50°C
-
-**GOOD** status if:
+**PASSED** status if:
 
 - All attributes above thresholds
 - No critical errors
 - Temperature normal
+
+### RAID Array Monitoring
+
+The tool can detect RAID array health status:
+
+- **Degraded arrays** - When disks are missing from the array (requires `--array-size` option)
+- **Active rebuilds** - When array is rebuilding after disk replacement
+
+**Degraded Array Detection:**
+
+The JMicron controller reports which disks are present via a bitmask at offset 0x1F0 in IDENTIFY responses. To detect degraded arrays, specify the expected number of disks using `--array-size N`:
+
+```bash
+sudo jmraidstatus --array-size 4 /dev/sdc
+```
+
+If the controller reports fewer disks than expected (e.g., a completely offline drive), the tool will detect the degraded state and exit with code 1. Without `--array-size`, the tool cannot distinguish between a healthy 3-disk array and a degraded 4-disk array with one disk missing.
+
+See **[docs/RAID_FLAGS.md](docs/RAID_FLAGS.md)** for technical details on RAID status flag interpretation.
 
 ### Supported Disks
 

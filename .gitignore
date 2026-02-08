@@ -32,5 +32,7 @@ Thumbs.db
 *.bak
 *.orig
 .env
+.log
 tools/monitor/states
+investigation/data/archive
 
