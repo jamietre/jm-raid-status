@@ -13,27 +13,23 @@ Unlike standard SMART queries (which use ATA SMART commands), the JMicron protoc
 **This tool uses sector 1024 (configurable via --sector flag).**
 
 1. **Safety Check**
-   - Tool reads the communication sector (default: 1024)
+   - Tool reads the communication sector (default: `1024`)
    - Verifies it contains all zeros (unused)
    - **Refuses to run if sector contains any data**
    - This prevents accidental corruption
 
-2. **Backup Phase** (`jm_init_device`)
-   - Tool reads the communication sector
-   - Saves the 512-byte content to memory buffer
-   - Preserves original data (should be all zeros)
-
-3. **Command Phase** (`jm_execute_command`)
+2. **Command Phase** (`jm_execute_command`)
    - Tool writes a command to the communication sector
    - Command includes: magic bytes, disk number, command type, CRC
    - Controller intercepts the write and processes it
    - Controller writes response back to the same sector
    - Tool reads the sector to get the response
-   - Process repeats for each disk query (probe11-probe15)
+   - Process repeats for each disk query (IDENTIFY, SMART commands)
 
-4. **Cleanup Phase** (`jm_cleanup_device`)
-   - Tool writes the backed-up data back to the sector
-   - **Sector is restored to original state** (all zeros)
+3. **Cleanup Phase** (`jm_cleanup_device`)
+   - Tool writes 512 bytes of zeros to the sector
+   - **Sector is restored to empty state**
+   - Signal handlers ensure cleanup even on interruption (Ctrl+C, SIGTERM)
    - Device is closed
 
 ### Why Sector 1024?
@@ -314,11 +310,11 @@ The JMicron protocol **temporarily uses a communication sector** (default: 1024)
 **Key Points:**
 
 - ✅ No special "wakeup" needed - controller watches all sector writes
-- ✅ Sector 1024 chosen for safety (in the partition gap)
+- ✅ Sector `1024` chosen for safety (in the partition gap)
 - ✅ Tool verifies sector is empty before use (mandatory safety check)
-- ✅ Sector content is backed up and restored
+- ✅ Sector restored to zeros after operations (with signal handling)
 - ⚠️ Brief window (1-3 seconds) where sector contains protocol data
-- ⚠️ Tool interruption leaves sector non-zero (minor impact if sector was unused)
+- ⚠️ Tool interruption may leave sector non-zero (minor impact if sector was unused)
 - ⚠️ Controller malfunction risk exists (extremely rare but documented)
 
 **Always have complete backups before use.**

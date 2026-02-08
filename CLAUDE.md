@@ -78,9 +78,9 @@ docs/ (in root)
 ## Safety Warnings
 
 **CRITICAL RISKS**:
-1. Tool temporarily overwrites sector 1024 (or user-specified)
+1. Tool temporarily overwrites sector `1024` (or user-specified)
 2. HD Sentinel reported one case of RAID array failure and data loss
-3. Triple-layer safety: range validation, empty check, backup/restore
+3. Triple-layer safety: range validation, empty sector verification, cleanup with signal handling
 4. **Always have complete backups before use**
 
 ## Development Notes

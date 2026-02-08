@@ -20,8 +20,8 @@ This implementation is a rewrite using the protocol knowledge from that research
 
 ## Features
 
-- **Read SMART data** from disks behind JMicron RAID controllers (USB or PCIe)
-- **Automatic hardware detection** for USB enclosures and PCIe controllers
+- **Read SMART data** from disks behind JMicron RAID controllers
+- **Automatic hardware detection** for USB enclosures
 - **Display human-readable health status** with easy-to-understand summaries
 - **Monitor critical attributes** including:
   - Reallocated sectors
@@ -185,22 +185,6 @@ Disk 1: WDC WD100EMAZ-00WJTA0
 Overall RAID Health: WARNING - Monitor disk(s) closely
 ```
 
-**PCIe Controller Example:**
-
-```
-jmraidstatus v1.0 - SMART Health Monitor
-Device: /dev/sdc (Controller: JMB394)
-
-Disk 0: WDC WD30EFRX-68EUZN0
-  Status: GOOD
-  Temperature: 35°C
-  Power On Hours: 12,456 hours (518 days)
-  Power Cycles: 234
-  No errors detected
-
-Overall RAID Health: GOOD - All disks healthy
-```
-
 ### Full SMART Table
 
 ```
@@ -230,12 +214,11 @@ Health Assessment:
 jmraidstatus uses Linux SCSI Generic (SG_IO) ioctls to communicate with the RAID controller. It:
 
 1. **Verifies sector is empty** - Checks that the sector contains all zeros (safety requirement)
-2. **Backs up the sector** - Reads and saves the current 512-byte content (default: sector 1024)
-3. **Sends wakeup sequence** - Writes special commands to the sector to activate controller
-4. **Exchanges commands/responses** - Uses the sector as a "mailbox" to query each disk
-5. **Parses SMART data** - Extracts attribute values and thresholds from responses
-6. **Assesses disk health** - Evaluates critical attributes for warnings/failures
-7. **Restores original sector** - Writes backed-up data back to the sector
+2. **Sends commands** - Writes protocol commands to the sector (default: sector `1024`)
+3. **Exchanges commands/responses** - Uses the sector as a "mailbox" to query each disk
+4. **Parses SMART data** - Extracts attribute values and thresholds from responses
+5. **Assesses disk health** - Evaluates critical attributes for warnings/failures
+6. **Restores sector** - Writes zeros back to the sector (cleanup phase)
 
 **⚠️ IMPORTANT**: The tool **temporarily overwrites an unused sector** (default: 1024) during the 1-3 seconds it runs. The tool **will refuse to run** if the sector contains any data. If somehow interrupted before completion, that sector remains corrupted. See **[SECTOR_USAGE.md](SECTOR_USAGE.md)** for detailed technical explanation and risks.
 
@@ -266,14 +249,13 @@ The tool evaluates disk health using these criteria:
 
 ### Supported Disks
 
-The JMB394 controller supports up to 5 disks (numbered 0-4). The tool automatically detects which disks are present and queries only those.
+The JMB567 controller supports up to 5 disks (numbered 0-4). The tool automatically detects which disks are present and queries only those.
 
 ## Requirements
 
 - Linux operating system with SCSI Generic support
-- JMicron RAID controller (JMB394, JMB393, JMB39x series)
-  - USB-connected external enclosures (most common)
-  - PCIe controller cards
+- JMicron RAID controller (tested: JMB567)
+  - USB-connected external enclosures
 - Root privileges (required for raw device access)
 
 ## Limitations
@@ -294,10 +276,9 @@ The JMB394 controller supports up to 5 disks (numbered 0-4). The tool automatica
 The tool takes precautions to avoid data corruption:
 
 - **Verifies sector is empty** before use (must be all zeros - hard requirement)
-- Backs up the sector before use (reads original 512 bytes)
-- Restores original data after operations (writes back the backup)
+- **Restores sector to zeros** after operations (cleanup on normal exit and signal handling)
 - Validates CRC checksums on all responses
-- Only modifies one sector temporarily (default: 1024, configurable with `--sector`)
+- Only modifies one sector temporarily (default: `1024`, configurable with `--sector`)
 
 **However, there are inherent risks:**
 
@@ -331,9 +312,8 @@ The tool takes precautions to avoid data corruption:
 **No disks detected**
 
 - Verify RAID controller is functioning
-- For PCIe controllers, check BIOS/UEFI settings
-- For USB enclosures, ensure the enclosure is powered on
-- Ensure disks are properly connected
+- Ensure the enclosure is powered on and connected
+- Ensure disks are properly inserted
 - Try `--verbose` flag to see detailed detection information
 
 ## Integration with Monitoring Systems

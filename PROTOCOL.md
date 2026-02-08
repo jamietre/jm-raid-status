@@ -211,20 +211,12 @@ In WSL environments, hardware detection is skipped as:
 - Slot 4 typically unused
 - JMB567 supports up to 5 disks
 
-### USB vs PCIe Controllers
-- **USB**: Vendor ID 0x152d (JMicron USB), detected via sysfs
-- **PCIe**: Detected via lspci, PCI IDs vary by model
-- Protocol is identical for both
-
 ## Known Controller Models
 
-### USB Controllers
+**USB Controllers:**
 - **JMB567**: Product ID 0x0567, supports 5 disks
 - **JMB575**: Product ID 0x0575, supports 5 disks
-
-### PCIe Controllers
-- Various JMicron models (JMB360, JMB363, etc.)
-- Detection via PCI vendor ID 0x197B
+- USB Vendor ID: 0x152d (JMicron USB)
 
 ## Testing Hardware
 
