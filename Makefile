@@ -38,6 +38,29 @@ DISK_HEALTH_OBJECTS = $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(DISK_HEALTH_SOURC
 # All targets
 TARGETS = $(BINDIR)/jmraidstatus $(BINDIR)/smartctl-parser $(BINDIR)/disk-health
 
+.DEFAULT_GOAL := all
+
+# Help target
+help:
+	@echo "jm-raid-status Build System"
+	@echo ""
+	@echo "Available targets:"
+	@echo "  make              - Build all binaries (default)"
+	@echo "  make clean        - Remove all build artifacts"
+	@echo "  make test         - Run integration tests"
+	@echo "  make install      - Install binaries to /usr/local/bin"
+	@echo "  make tools        - Build utility tools"
+	@echo ""
+	@echo "Binaries built:"
+	@echo "  bin/jmraidstatus   - JMicron RAID SMART query tool"
+	@echo "  bin/smartctl-parser - Convert smartctl JSON to disk-health format"
+	@echo "  bin/disk-health     - Multi-source SMART aggregator"
+	@echo ""
+	@echo "Testing:"
+	@echo "  make test          - Run all integration tests"
+	@echo "  make tests         - Run unit tests (if available)"
+	@echo ""
+
 all: $(TARGETS)
 
 $(BINDIR)/jmraidstatus: $(JMICRON_OBJECTS) | $(BINDIR)
@@ -113,4 +136,12 @@ $(TOOLSBINDIR):
 clean-tools:
 	-rm -rf $(TOOLSBINDIR)
 
-.PHONY: all clean install tests clean-tests tools clean-tools
+# Integration tests
+integration-tests: $(TARGETS)
+	@echo "Running integration tests..."
+	@bash tests/integration/test_aggregator.sh
+
+# Alias for integration tests
+test: integration-tests
+
+.PHONY: all clean install tests clean-tests tools clean-tools integration-tests test help
