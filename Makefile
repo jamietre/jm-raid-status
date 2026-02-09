@@ -1,32 +1,47 @@
 CC = gcc
-CFLAGS = -g -O2 -Wall -Wextra -std=gnu99
+CFLAGS = -g -O2 -Wall -Wextra -std=gnu99 -I$(SRCDIR)/jsmn
 SRCDIR = src
 BINDIR = bin
 OBJDIR = $(BINDIR)/obj
 TESTDIR = tests
 TESTBINDIR = $(BINDIR)/tests
 
-SOURCES = $(SRCDIR)/jmraidstatus.c \
-          $(SRCDIR)/jm_protocol.c \
-          $(SRCDIR)/jm_commands.c \
-          $(SRCDIR)/smart_parser.c \
-          $(SRCDIR)/smart_attributes.c \
-          $(SRCDIR)/output_formatter.c \
-          $(SRCDIR)/jm_crc.c \
-          $(SRCDIR)/sata_xor.c \
-          $(SRCDIR)/config.c \
-          $(SRCDIR)/hardware_detect.c
+# JMicron tool sources
+JMICRON_SOURCES = $(SRCDIR)/jmraidstatus.c \
+                  $(SRCDIR)/jm_protocol.c \
+                  $(SRCDIR)/jm_commands.c \
+                  $(SRCDIR)/smart_parser.c \
+                  $(SRCDIR)/smart_attributes.c \
+                  $(SRCDIR)/output_formatter.c \
+                  $(SRCDIR)/jm_crc.c \
+                  $(SRCDIR)/sata_xor.c \
+                  $(SRCDIR)/config.c \
+                  $(SRCDIR)/hardware_detect.c
 
-OBJECTS = $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(SOURCES))
-TARGET = $(BINDIR)/jmraidstatus
+JMICRON_OBJECTS = $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(JMICRON_SOURCES))
 
-all: $(TARGET)
+# smartctl-parser sources
+SMARTCTL_PARSER_SOURCES = $(SRCDIR)/parsers/smartctl_parser.c \
+                          $(SRCDIR)/parsers/common.c \
+                          $(SRCDIR)/smart_attributes.c
 
-$(TARGET): $(OBJECTS) | $(BINDIR)
-	$(CC) $(CFLAGS) $(OBJECTS) -o $(TARGET)
-	@echo "Built: $(TARGET)"
+SMARTCTL_PARSER_OBJECTS = $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(SMARTCTL_PARSER_SOURCES))
+
+# All targets
+TARGETS = $(BINDIR)/jmraidstatus $(BINDIR)/smartctl-parser
+
+all: $(TARGETS)
+
+$(BINDIR)/jmraidstatus: $(JMICRON_OBJECTS) | $(BINDIR)
+	$(CC) $(CFLAGS) $(JMICRON_OBJECTS) -o $@
+	@echo "Built: $@"
+
+$(BINDIR)/smartctl-parser: $(SMARTCTL_PARSER_OBJECTS) | $(BINDIR)
+	$(CC) $(CFLAGS) $(SMARTCTL_PARSER_OBJECTS) -o $@
+	@echo "Built: $@"
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BINDIR):
@@ -38,15 +53,16 @@ $(OBJDIR):
 clean:
 	-rm -rf $(BINDIR)
 
-install: $(TARGET)
-	install -D -m 755 $(TARGET) $(DESTDIR)/usr/local/bin/jmraidstatus
+install: $(TARGETS)
+	install -D -m 755 $(BINDIR)/jmraidstatus $(DESTDIR)/usr/local/bin/jmraidstatus
+	install -D -m 755 $(BINDIR)/smartctl-parser $(DESTDIR)/usr/local/bin/smartctl-parser
 
 # Unit tests
 TEST_SOURCES = $(wildcard $(TESTDIR)/test_*.c)
 TEST_BINS = $(patsubst $(TESTDIR)/%.c,$(TESTBINDIR)/%,$(TEST_SOURCES))
 
 # Shared object files needed for tests (exclude main)
-TEST_OBJS = $(filter-out $(OBJDIR)/jmraidstatus.o,$(OBJECTS))
+TEST_OBJS = $(filter-out $(OBJDIR)/jmraidstatus.o,$(JMICRON_OBJECTS))
 
 tests: $(TEST_BINS)
 	@echo ""
