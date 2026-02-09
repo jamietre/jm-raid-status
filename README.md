@@ -2,6 +2,8 @@
 
 A console tool to monitor disk health in JMicron hardware RAID arrays, including USB-connected external enclosures.
 
+> **Note**: Multi-source monitoring in development! A companion `disk-health` aggregator tool is being developed to monitor JMicron arrays alongside regular SATA/NVMe drives. See [MULTI_SOURCE_PLAN.md](MULTI_SOURCE_PLAN.md) for details.
+
 ## Overview
 
 `jmraidstatus` communicates with JMicron SATA RAID controllers to read SMART (Self-Monitoring, Analysis and Reporting Technology) data from disks behind the controller. Unlike `smartctl` which cannot access disks behind hardware RAID controllers, `jmraidstatus` uses the controller's proprietary protocol to retrieve health information.
@@ -12,9 +14,25 @@ This tool uses the reverse-engineered JMicron proprietary protocol to communicat
 
 If you use this on other devices, please report your results! Make a pull request or open an issue.
 
+## Why & How
+
+My use case for creating this is to expand storage on my Synology NAS with the cheap mediasonic enclosure I already own. This works fine, but my NAS is in a dark corner and human eyes only see it when there's a problem. I wouldn't be comfortable with a hardware RAID that only lets me know there's a problem with blinking lights. This tool allows active monitoring of the status of the hard drives in the enclosure, so I can create a scheduled task to poll it and report any issues.
+
+This was written almost entirely by Claude Code, through a process of analyzing the controller query responses, and comparing them to known data about the hard disk SMART status obtained using [Hard Disk Sentinel](https://www.hdsentinel.com/) on Windows, which does have the ability to read the drive details.
+
+Additionally, I forced the array into a degraded state by removing a disk and taking snapshots while degraded and during the rebuild process and compared these to good state snapshots.
+
+It's only been tested against the two Mediasonic HFR2-SU3S2 boxes I own, which have about 6 different kinds of drives. A couple limitations and edge cases were observed:
+
+- I have not determined a way to identify an array in a degraded state (e.g. one drive offline) other than comparing the number of drives reported to the number expected using this process
+- One drive I own did not report manufacturer SMART thresholds; I don't know if this is a problem with the drive or the software/controller, but in this case we use default thresholds
+- There appears to be a flag reported when the array is in the process of rebuilding. This has only been tested once but it was definitely set only during the rebuild process, so I have reasonable confidence.
+
+If you are intrested in experimenting more, the repo includes a number of test script for collecting and comparing data.
+
 ## Acknowledgments
 
-This project was inspired by the original [jJMRaidCon by Werner Johansson](https://github.com/wjoe/jmraidcon) (2010), which laid groundwork for reverse engineering of the JMicron protocol.
+This project was inspired by the original [JMRaidCon by Werner Johansson](https://github.com/wjoe/jmraidcon) (2010), which laid groundwork for reverse engineering of the JMicron protocol.
 
 This implementation is a rewrite using the protocol knowledge from that research, with features for SMART parsing, user-friendly output, and modern tooling.
 
@@ -23,23 +41,16 @@ This implementation is a rewrite using the protocol knowledge from that research
 - **Read SMART data** from disks behind JMicron RAID controllers
 - **Automatic hardware detection** for USB enclosures
 - **Display human-readable health status** with easy-to-understand summaries
-- **Monitor critical attributes** including:
-  - Reallocated sectors
-  - Pending sectors
-  - Uncorrectable sectors
-  - Drive temperature
-  - Power-on hours
-  - And all other standard SMART attributes
+- **Monitor critical SMART attributes** including temperature, power-on hours, reallocated sectores, etc.
 - **Multiple output formats**:
-  - Summary view (default) - Quick health overview
-  - Full table view - Complete SMART attribute listing
-  - JSON format - For scripting and automation
+- Summary view (default) - Quick health overview
+- Full table view - Complete SMART attribute listing
+- JSON format - For scripting and automation
 - **Exit codes for monitoring systems** - Integrate with monitoring tools
-- **Configurable sector number** - Avoid conflicts with data
 
 ## Possible Risk
 
-**The JMicron protocol uses a disk sector as a communication channel** (default: sector 33). The tool temporarily writes commands to this sector and reads responses back. To protect your data:
+**The JMicron protocol writes to a disk sector as a communication channel** (default: sector 33). The tool temporarily writes commands to this sector and reads responses back. To protect your data:
 
 - **The tool refuses to run if the sector contains any data** - this safety check cannot be bypassed
 - Sector contents are verified as empty before any operations
@@ -273,11 +284,13 @@ The tool evaluates disk health using these criteria:
 You can customize the health assessment thresholds using a configuration file:
 
 **Generate default config:**
+
 ```bash
 sudo jmraidstatus --write-default-config /etc/jmraidstatus.json
 ```
 
 **Example config file:**
+
 ```json
 {
   "use_manufacturer_thresholds": true,
@@ -298,16 +311,19 @@ sudo jmraidstatus --write-default-config /etc/jmraidstatus.json
 ```
 
 **Configuration options:**
+
 - `use_manufacturer_thresholds`: If `true`, also check drive's built-in thresholds (default: `true`)
 - `temperature.critical`: Temperature in °C to consider critical (default: 60)
 - `attributes.0xNN.raw_critical`: Fail if attribute raw value exceeds this threshold
 
 **Use custom config:**
+
 ```bash
 sudo jmraidstatus --config /etc/jmraidstatus.json /dev/sdc
 ```
 
 This allows you to:
+
 - Accept a small number of reallocated sectors as normal wear
 - Customize temperature thresholds for your environment
 - Disable manufacturer thresholds if they're too conservative

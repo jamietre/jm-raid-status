@@ -14,7 +14,8 @@ SOURCES = $(SRCDIR)/jmraidstatus.c \
           $(SRCDIR)/output_formatter.c \
           $(SRCDIR)/jm_crc.c \
           $(SRCDIR)/sata_xor.c \
-          $(SRCDIR)/config.c
+          $(SRCDIR)/config.c \
+          $(SRCDIR)/hardware_detect.c
 
 OBJECTS = $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(SOURCES))
 TARGET = $(BINDIR)/jmraidstatus

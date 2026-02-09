@@ -287,7 +287,8 @@ void format_full_smart(const disk_smart_data_t* disk) {
 }
 
 void format_json(const char* device_path, const disk_smart_data_t* disks, int num_disks,
-                 int expected_array_size, int present_disks, int is_degraded) {
+                 int expected_array_size, int present_disks, int is_degraded,
+                 const char* controller_model) {
     time_t now = time(NULL);
     struct tm* tm_info = gmtime(&now);
     char timestamp[64];
@@ -325,8 +326,15 @@ void format_json(const char* device_path, const disk_smart_data_t* disks, int nu
 
     printf("{\n");
     printf("  \"version\": \"1.0\",\n");
+    printf("  \"backend\": \"jmicron\",\n");
     printf("  \"device\": \"%s\",\n", device_path);
     printf("  \"timestamp\": \"%s\",\n", timestamp);
+
+    /* Controller information */
+    printf("  \"controller\": {\n");
+    printf("    \"model\": \"%s\",\n", controller_model ? controller_model : "Unknown");
+    printf("    \"type\": \"raid_array\"\n");
+    printf("  },\n");
 
     /* RAID status section */
     printf("  \"raid_status\": {\n");
