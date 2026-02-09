@@ -1,60 +1,57 @@
 # Multi-Source SMART Monitoring - Implementation Plan
 
-## Revised Architecture: Separate Binaries
+## Architecture: Pipe-Based with Bash Composition
 
 ### Overview
 
-Transform the project from a JMicron-only tool into a multi-source SMART monitoring system using **separate binaries** rather than a monolithic plugin architecture.
+Transform the project into a multi-source SMART monitoring system using **Unix pipes and bash command grouping** - no config files or orchestrators needed.
 
 ```
-┌─────────────────┐
-│  disk-health    │  Main entry point (aggregator)
-│  (new binary)   │  - Reads JSON config
-└────────┬────────┘  - Spawns subprocesses
-         │           - Aggregates results
-         │
-    ┌────┴────┬──────────┬──────────┐
-    │         │          │          │
-┌───▼──────┐ ┌▼────────┐ ┌▼───────┐ ┌▼──────┐
-│jmraidstatus│ │smartctl │ │ future │ │ ...   │
-│  (JMicron) │ │(existing)│ │ tools  │ │       │
-└───┬────────┘ └┬────────┘ └────────┘ └───────┘
-    │           │
-    ▼           ▼
-   JSON        JSON
+┌─────────────┐                    ┌─────────────┐
+│ jmraidstatus│───────────────────▶│             │
+│ --json-only │  (already correct  │             │
+└─────────────┘     format)        │             │
+                                   │             │
+┌─────────────┐  ┌──────────────┐  │             │
+│  smartctl   │─▶│ smartctl-    │─▶│ disk-health │──▶ Report
+│  --json=c   │  │ parser       │  │             │
+└─────────────┘  └──────────────┘  │  (stdin)    │
+                                   │             │
+┌─────────────┐  ┌──────────────┐  │             │
+│   storcli   │─▶│ storcli-     │─▶│             │
+│     /cX     │  │ parser       │  │             │
+└─────────────┘  └──────────────┘  └─────────────┘
+
+                        |
+                        ▼
+                  Combined via bash:
+                  {
+                    jmraidstatus --json-only /dev/sdc
+                    smartctl --json=c /dev/sda | smartctl-parser
+                  } | disk-health
 ```
 
-## Components
+## Standard Format (disk-health JSON)
 
-### 1. `jmraidstatus` - JMicron Query Tool (existing, minor changes)
+All parsers convert to this format (which `jmraidstatus` already emits):
 
-**Purpose**: Standalone tool to query JMicron RAID controllers
-
-**Changes Needed**:
-- Ensure JSON output is clean and parsable (no extra output to stdout)
-- Enhance JSON schema to include all necessary metadata
-- Keep current functionality otherwise
-
-**Usage**:
-```bash
-jmraidstatus --json /dev/sdc
-```
-
-**Output** (JSON to stdout):
 ```json
 {
   "version": "1.0",
-  "backend": "jmicron",
+  "backend": "jmicron|smartctl|storcli|...",
   "device": "/dev/sdc",
+  "timestamp": "2026-02-09T12:00:00Z",
   "controller": {
     "model": "JMB567",
-    "type": "raid_array"
+    "type": "raid_array|single_disk"
   },
   "raid_status": {
-    "status": "healthy",
+    "status": "healthy|degraded|failed",
     "degraded": false,
     "present_disks": 4,
-    "expected_disks": 4
+    "expected_disks": 4,
+    "rebuilding": false,
+    "issues": []
   },
   "disks": [
     {
@@ -63,358 +60,646 @@ jmraidstatus --json /dev/sdc
       "serial": "WD-WCC7K0123456",
       "firmware": "80.00A80",
       "size_mb": 3815447,
-      "overall_status": "passed",
+      "overall_status": "passed|failed",
       "attributes": [...]
     }
   ]
 }
 ```
 
-### 2. `disk-health` - Aggregator (new binary)
+## Input Format: NDJSON (Newline-Delimited JSON)
 
-**Purpose**: Main entry point that aggregates SMART data from multiple sources
+`disk-health` reads from stdin, expecting one compact JSON object per line:
 
-**Functionality**:
-- Read JSON config file specifying sources
-- Spawn subprocesses for each source
-- Parse JSON output from each tool
-- Aggregate results into unified report
-- Output summary or full JSON
-
-**Config File** (`/etc/disk-health.json` or `~/.config/disk-health.json`):
-```json
-{
-  "sources": [
-    {
-      "type": "jmicron",
-      "device": "/dev/sdc",
-      "tool": "jmraidstatus"
-    },
-    {
-      "type": "smartctl",
-      "device": "/dev/sda"
-    },
-    {
-      "type": "smartctl",
-      "device": "/dev/sdb"
-    }
-  ],
-  "thresholds": {
-    "temperature_critical": 55,
-    "attributes": [
-      {"id": 5, "raw_critical": 1},
-      {"id": 187, "raw_critical": 1},
-      {"id": 188, "raw_critical": 1},
-      {"id": 197, "raw_critical": 1},
-      {"id": 198, "raw_critical": 1}
-    ]
-  }
-}
+```
+{"version":"1.0","backend":"jmicron",...}\n
+{"version":"1.0","backend":"smartctl",...}\n
+{"version":"1.0","backend":"smartctl",...}\n
 ```
 
-**Usage**:
+Each source outputs one line of compact JSON.
+
+## Components
+
+### 1. Source Tools (emit native format)
+
+**jmraidstatus** (already done ✅):
 ```bash
-# Summary view
-disk-health
+jmraidstatus --json-only /dev/sdc
+```
+Outputs: disk-health JSON format (one compact line)
 
-# Full JSON output
-disk-health --json
+**smartctl** (external tool):
+```bash
+smartctl --json=c --all /dev/sda
+```
+Outputs: smartctl's JSON format
 
-# Use custom config
-disk-health --config /path/to/config.json
+**storcli** (future):
+```bash
+storcli /c0 show all J
+```
+Outputs: MegaRAID JSON format
 
-# Query specific source only
-disk-health --source jmicron:/dev/sdc
+### 2. Parser Binaries (convert to disk-health format)
+
+Each parser is a simple stdin→stdout filter:
+
+**smartctl-parser**:
+```bash
+smartctl --json=c /dev/sda | smartctl-parser
+```
+- Reads: smartctl JSON from stdin
+- Outputs: disk-health JSON format (one compact line)
+
+**storcli-parser** (future):
+```bash
+storcli /c0 show all J | storcli-parser
+```
+- Reads: storcli JSON from stdin
+- Outputs: disk-health JSON format (one compact line)
+
+**nvme-parser** (future):
+```bash
+nvme smart-log /dev/nvme0 -o json | nvme-parser
+```
+- Reads: nvme-cli JSON from stdin
+- Outputs: disk-health JSON format (one compact line)
+
+### 3. Aggregator (disk-health)
+
+Reads NDJSON from stdin, aggregates, and outputs report:
+
+```bash
+{ cmd1; cmd2; cmd3; } | disk-health [OPTIONS]
 ```
 
-**Output** (aggregated):
+**Options**:
+- `--json` - Output aggregated JSON
+- `--summary` - Output text summary (default)
+- `--quiet` - Exit code only
+- `--verbose` - Detailed output
+
+**Output** (summary mode):
+```
+Disk Health Report - 2026-02-09 12:00:00
+
+Sources: 3
+  ✓ jmicron /dev/sdc (4 disks)
+  ✓ smartctl /dev/sda (1 disk)
+  ✓ smartctl /dev/sdb (1 disk)
+
+Overall Status: PASSED
+  Total Disks: 6
+  Healthy: 6
+  Failed: 0
+
+Exit Code: 0 (all healthy)
+```
+
+**Output** (JSON mode):
 ```json
 {
   "version": "2.0",
   "timestamp": "2026-02-09T12:00:00Z",
   "sources": [
-    {
-      "backend": "jmicron",
-      "device": "/dev/sdc",
-      "status": "success",
-      "controller": {...},
-      "raid_status": {...},
-      "disks": [...]
-    },
-    {
-      "backend": "smartctl",
-      "device": "/dev/sda",
-      "status": "success",
-      "disks": [...]
-    }
+    {"backend": "jmicron", "device": "/dev/sdc", ...},
+    {"backend": "smartctl", "device": "/dev/sda", ...},
+    {"backend": "smartctl", "device": "/dev/sdb", ...}
   ],
   "summary": {
-    "total_disks": 5,
-    "healthy_disks": 5,
+    "total_disks": 6,
+    "healthy_disks": 6,
     "failed_disks": 0,
     "overall_status": "passed"
   }
 }
 ```
 
-### 3. `smartctl` - External Tool (no changes)
+## Usage Examples
 
-**Purpose**: Query regular SATA/NVMe drives
+### Single Source
 
-**Usage** (called by aggregator):
 ```bash
-smartctl --json=c --all /dev/sda
+jmraidstatus --json-only /dev/sdc | disk-health
 ```
 
-## Implementation Steps
+### Multiple Sources (Bash Grouping)
 
-### Phase 1: Update `jmraidstatus` JSON Output
+**Option A: Curly braces**
+```bash
+{
+  jmraidstatus --json-only /dev/sdc
+  smartctl --json=c /dev/sda | smartctl-parser
+  smartctl --json=c /dev/sdb | smartctl-parser
+} | disk-health
+```
 
-**Goal**: Ensure JSON output is clean and includes all metadata
+**Option B: Subshell**
+```bash
+(
+  jmraidstatus --json-only /dev/sdc
+  smartctl --json=c /dev/sda | smartctl-parser
+  smartctl --json=c /dev/sdb | smartctl-parser
+) | disk-health
+```
 
-**Tasks**:
-1. Review current JSON output format
-2. Add missing fields:
-   - `backend`: "jmicron"
-   - `device`: device path
-   - `controller`: {model, type}
-   - Ensure `raid_status` is complete
-3. Ensure NO extra output to stdout in JSON mode (only JSON)
-4. Add `--json-only` flag (implies `--json` + `--quiet`)
-5. Test JSON output is valid and parsable
+Both work identically - choose whichever you prefer.
 
-**Files to Modify**:
-- `src/output_formatter.c`: Enhance `format_json()`
-- `src/jmraidstatus.c`: Add `--json-only` flag handling
-- `docs/JSON_API.md`: Document updated schema
+### Wrapper Script for Convenience
 
-### Phase 2: Create Aggregator Binary
+Create `~/check-all-disks.sh`:
+```bash
+#!/bin/bash
+# Check all my disks and aggregate results
 
-**Goal**: Create `disk-health` binary that aggregates multiple sources
+{
+  # RAID array via JMicron
+  jmraidstatus --json-only /dev/sdc
+
+  # Regular SATA drives
+  smartctl --json=c --all /dev/sda | smartctl-parser
+  smartctl --json=c --all /dev/sdb | smartctl-parser
+
+  # NVMe drive (future)
+  # nvme smart-log /dev/nvme0 -o json | nvme-parser
+} | disk-health "$@"
+```
+
+**Usage**:
+```bash
+sudo ~/check-all-disks.sh              # Summary
+sudo ~/check-all-disks.sh --json       # Full JSON
+sudo ~/check-all-disks.sh --quiet      # Exit code only
+```
+
+**Add to cron**:
+```cron
+# Check disks daily at 2 AM
+0 2 * * * /root/check-all-disks.sh --json > /var/log/disk-health.json
+```
+
+### Parallel Execution (Advanced)
+
+Run queries in parallel for faster results:
+
+```bash
+{
+  jmraidstatus --json-only /dev/sdc &
+  smartctl --json=c /dev/sda | smartctl-parser &
+  smartctl --json=c /dev/sdb | smartctl-parser &
+  wait
+} | disk-health
+```
+
+## Implementation Plan
+
+### Phase 1: Update jmraidstatus JSON Output ✅ DONE
+
+**Status**: COMPLETED
+
+**Changes Made**:
+- Added `"backend": "jmicron"` field
+- Added `"controller": {model, type}` object
+- Added `--json-only` flag (implies `--json` + `--quiet`)
+- Ensured clean output with no extra messages
+- Refactored hardware detection into separate module
+
+### Phase 2: Create smartctl-parser Binary
+
+**Goal**: Convert smartctl JSON to disk-health JSON format
 
 **New Files**:
-- `src/aggregator.c`: Main entry point for aggregator
-- `src/subprocess.c`: Subprocess spawning and JSON parsing
-- `src/aggregator_config.c`: Config file parsing (JSON)
-- `src/aggregator_output.c`: Aggregated output formatting
+- `src/parsers/smartctl_parser.c` - Main parser binary
+- `src/parsers/smartctl_parser.h` - Parser interface
+- `src/parsers/common.c` - Shared JSON utilities (jsmn-based)
+- `src/parsers/common.h` - Common parser utilities
+
+**Implementation**:
+
+```c
+/* src/parsers/smartctl_parser.c */
+
+int main(void) {
+    // Read all stdin
+    char* input = read_all_stdin();
+
+    // Parse smartctl JSON
+    smartctl_data_t data;
+    if (parse_smartctl_json(input, &data) != 0) {
+        fprintf(stderr, "Error: Failed to parse smartctl JSON\n");
+        return 1;
+    }
+
+    // Convert to disk-health format
+    disk_health_json_t output;
+    convert_smartctl_to_disk_health(&data, &output);
+
+    // Output compact JSON (one line)
+    print_compact_json(&output);
+    printf("\n");
+
+    return 0;
+}
+```
+
+**Key Functions**:
+- `parse_smartctl_json()` - Parse smartctl's JSON schema
+- `convert_smartctl_to_disk_health()` - Map fields to our format
+- `print_compact_json()` - Output single-line JSON
+
+**smartctl JSON Fields to Extract**:
+```json
+{
+  "model_name": "...",
+  "serial_number": "...",
+  "firmware_version": "...",
+  "user_capacity": {...},
+  "ata_smart_attributes": {
+    "table": [
+      {"id": 5, "name": "...", "value": ..., "worst": ..., "thresh": ..., "raw": {...}},
+      ...
+    ]
+  },
+  "temperature": {...}
+}
+```
+
+**Output** (disk-health format):
+```json
+{"version":"1.0","backend":"smartctl","device":"/dev/sda","timestamp":"...","controller":{"model":"N/A","type":"single_disk"},"raid_status":null,"disks":[{...}]}
+```
+
+### Phase 3: Create disk-health Aggregator Binary
+
+**Goal**: Read NDJSON from stdin, aggregate, and output report
+
+**New Files**:
+- `src/aggregator/disk_health.c` - Main entry point
+- `src/aggregator/ndjson_reader.c` - Read line-delimited JSON
+- `src/aggregator/aggregator.c` - Aggregation logic
+- `src/aggregator/output.c` - Summary and JSON output
 
 **Data Structures**:
-```c
-/* Parsed source configuration */
-typedef struct {
-    char type[32];           // "jmicron", "smartctl"
-    char device[256];        // "/dev/sdc"
-    char tool[256];          // "jmraidstatus" (optional, auto-detected)
-} source_config_t;
 
-/* Result from subprocess */
+```c
+/* Source result (parsed from one line of input) */
 typedef struct {
-    source_config_t source;
-    char* json_output;       // Raw JSON from subprocess
-    void* parsed_data;       // Parsed JSON structure
-    int exit_code;
-    char error[256];
+    char backend[32];           // "jmicron", "smartctl", etc.
+    char device[256];           // "/dev/sdc"
+    char controller_model[64];  // "JMB567" or "N/A"
+    char controller_type[32];   // "raid_array" or "single_disk"
+
+    disk_smart_data_t disks[32];  // All disks from this source
+    int num_disks;
+
+    raid_status_t raid_status;  // If applicable
+    disk_health_status_t overall_status;
 } source_result_t;
 
 /* Aggregated report */
 typedef struct {
-    source_result_t* results;
-    int num_results;
+    source_result_t sources[MAX_SOURCES];
+    int num_sources;
+
     int total_disks;
     int healthy_disks;
     int failed_disks;
     disk_health_status_t overall_status;
+
+    char timestamp[64];
 } aggregated_report_t;
 ```
 
-**Functions**:
+**Implementation**:
+
 ```c
-/* Config parsing */
-int config_load(const char* path, source_config_t** sources, int* num_sources);
+/* src/aggregator/disk_health.c */
 
-/* Subprocess execution */
-int subprocess_run(const char* command, char** output, int* exit_code);
-int subprocess_query_source(const source_config_t* source, source_result_t* result);
+int main(int argc, char** argv) {
+    cli_options_t options;
+    parse_arguments(argc, argv, &options);
 
-/* JSON parsing (use existing jsmn or cJSON) */
-int json_parse_jmicron(const char* json, void** parsed);
-int json_parse_smartctl(const char* json, void** parsed);
+    // Read NDJSON from stdin (one JSON object per line)
+    source_result_t sources[MAX_SOURCES];
+    int num_sources = 0;
 
-/* Aggregation */
-int aggregator_run(source_config_t* sources, int num_sources, aggregated_report_t* report);
+    char line[MAX_LINE_SIZE];
+    while (fgets(line, sizeof(line), stdin)) {
+        if (parse_disk_health_json(line, &sources[num_sources]) == 0) {
+            num_sources++;
+        } else {
+            fprintf(stderr, "Warning: Failed to parse JSON line\n");
+        }
+    }
 
-/* Output */
-void aggregator_format_summary(const aggregated_report_t* report);
-void aggregator_format_json(const aggregated_report_t* report);
+    if (num_sources == 0) {
+        fprintf(stderr, "Error: No valid sources found on stdin\n");
+        return 3;
+    }
+
+    // Aggregate results
+    aggregated_report_t report;
+    aggregate_sources(sources, num_sources, &report);
+
+    // Output based on mode
+    if (options.output_json) {
+        output_aggregated_json(&report);
+    } else {
+        output_summary(&report);
+    }
+
+    // Exit code based on health
+    return determine_exit_code(&report);
+}
 ```
 
-### Phase 3: Build System Updates
+**Key Functions**:
+- `parse_disk_health_json()` - Parse one line of disk-health JSON
+- `aggregate_sources()` - Combine all sources into unified report
+- `output_summary()` - Text summary output
+- `output_aggregated_json()` - JSON output
+- `determine_exit_code()` - 0=healthy, 1=failed, 3=error
 
-**Goal**: Build both binaries
+### Phase 4: Build System Updates
 
 **Makefile Changes**:
-```makefile
-# Two targets
-TARGETS = $(BINDIR)/jmraidstatus $(BINDIR)/disk-health
 
-# JMicron tool (existing sources)
+```makefile
+# Three main targets
+TARGETS = $(BINDIR)/jmraidstatus \
+          $(BINDIR)/smartctl-parser \
+          $(BINDIR)/disk-health
+
+# JMicron tool sources (existing)
 JMICRON_SOURCES = src/jmraidstatus.c src/jm_protocol.c src/jm_commands.c \
                   src/smart_parser.c src/smart_attributes.c \
                   src/output_formatter.c src/jm_crc.c src/sata_xor.c \
                   src/config.c src/hardware_detect.c
 
-# Aggregator tool (new sources)
-AGGREGATOR_SOURCES = src/aggregator.c src/subprocess.c \
-                     src/aggregator_config.c src/aggregator_output.c \
-                     src/config.c  # Shared config utilities
+JMICRON_OBJECTS = $(patsubst src/%.c,$(OBJDIR)/%.o,$(JMICRON_SOURCES))
 
-# Add jsmn for JSON parsing
-AGGREGATOR_CFLAGS = -I$(SRCDIR)/jsmn
+# smartctl-parser sources (new)
+SMARTCTL_PARSER_SOURCES = src/parsers/smartctl_parser.c \
+                          src/parsers/common.c \
+                          src/smart_parser.c \
+                          src/smart_attributes.c
+
+SMARTCTL_PARSER_OBJECTS = $(patsubst src/%.c,$(OBJDIR)/%.o,$(SMARTCTL_PARSER_SOURCES))
+
+# disk-health aggregator sources (new)
+AGGREGATOR_SOURCES = src/aggregator/disk_health.c \
+                     src/aggregator/ndjson_reader.c \
+                     src/aggregator/aggregator.c \
+                     src/aggregator/output.c \
+                     src/smart_parser.c \
+                     src/smart_attributes.c
+
+AGGREGATOR_OBJECTS = $(patsubst src/%.c,$(OBJDIR)/%.o,$(AGGREGATOR_SOURCES))
+
+# Compiler flags (add jsmn include path)
+CFLAGS = -g -O2 -Wall -Wextra -std=gnu99 -Isrc/jsmn
+
+all: $(TARGETS)
+
+$(BINDIR)/jmraidstatus: $(JMICRON_OBJECTS) | $(BINDIR)
+	$(CC) $(CFLAGS) $(JMICRON_OBJECTS) -o $@
+	@echo "Built: $@"
+
+$(BINDIR)/smartctl-parser: $(SMARTCTL_PARSER_OBJECTS) | $(BINDIR)
+	$(CC) $(CFLAGS) $(SMARTCTL_PARSER_OBJECTS) -o $@
+	@echo "Built: $@"
+
+$(BINDIR)/disk-health: $(AGGREGATOR_OBJECTS) | $(BINDIR)
+	$(CC) $(CFLAGS) $(AGGREGATOR_OBJECTS) -o $@
+	@echo "Built: $@"
+
+# Object file compilation
+$(OBJDIR)/%.o: src/%.c | $(OBJDIR)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJDIR)/parsers/%.o: src/parsers/%.c | $(OBJDIR)
+	@mkdir -p $(OBJDIR)/parsers
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJDIR)/aggregator/%.o: src/aggregator/%.c | $(OBJDIR)
+	@mkdir -p $(OBJDIR)/aggregator
+	$(CC) $(CFLAGS) -c $< -o $@
 ```
-
-### Phase 4: smartctl Integration
-
-**Goal**: Parse smartctl JSON output
-
-**smartctl Output** (reference):
-```bash
-smartctl --json=c --all /dev/sda
-```
-
-**Parser**:
-- Parse `json_format_version`
-- Extract `model_name`, `serial_number`, `firmware_version`
-- Parse `ata_smart_attributes.table[]`
-- Map to our `disk_smart_data_t` structure
-- Apply threshold configuration
-
-**Files**:
-- `src/smartctl_parser.c`: Parse smartctl JSON to `disk_smart_data_t`
-- `src/smartctl_parser.h`: Parser interface
 
 ### Phase 5: Documentation
 
-**Goal**: Update all documentation for new architecture
+**Files to Create/Update**:
 
-**Files to Update**:
-- `README.md`: Document both binaries
-- `docs/JSON_API.md`: Document both JSON schemas
-- `CLAUDE.md`: Update architecture notes
-- Create `docs/AGGREGATOR.md`: Usage guide for disk-health
+1. **docs/AGGREGATOR.md** - Usage guide for disk-health
+   - How to use bash grouping
+   - Example wrapper scripts
+   - Output format documentation
 
-**New Files**:
-- `docs/CONFIG_SCHEMA.md`: Document config file format
-- `examples/disk-health.json`: Example config file
+2. **examples/single-source.sh** - Simple example
+3. **examples/mixed-sources.sh** - RAID + regular drives
+4. **examples/parallel.sh** - Parallel execution
+5. **examples/cron-monitoring.sh** - Scheduled monitoring
+
+6. **docs/JSON_API.md** - Update with:
+   - disk-health standard JSON format
+   - Aggregated output format
+   - Parser requirements
+
+7. **README.md** - Update with:
+   - Overview of multi-source monitoring
+   - Quick start examples
+   - Link to AGGREGATOR.md
 
 ### Phase 6: Testing
 
-**Goal**: Ensure both binaries work standalone and together
-
-**Tests**:
-1. **jmraidstatus**: Existing tests still pass
-2. **JSON output**: Valid, parsable, complete
-3. **Aggregator**: Parse config, spawn subprocesses, aggregate
-4. **Integration**: End-to-end test with both tools
-
 **Test Files**:
-- `tests/test_aggregator.c`: Unit tests
-- `tests/test_subprocess.c`: Subprocess execution tests
-- `tests/test_smartctl_parser.c`: smartctl JSON parsing
-- `tests/integration/test_end_to_end.sh`: Full integration test
+
+1. **tests/test_smartctl_parser.c** - Unit tests for smartctl parsing
+   - Test with real smartctl JSON samples
+   - Verify output format matches disk-health schema
+
+2. **tests/test_aggregator.c** - Unit tests for aggregation logic
+   - Test with multiple sources
+   - Test with failed disks
+   - Test exit code logic
+
+3. **tests/integration/** - End-to-end tests
+   - `test_single_source.sh` - One source through pipe
+   - `test_multi_source.sh` - Multiple sources with grouping
+   - `test_invalid_input.sh` - Error handling
+
+4. **tests/data/** - Test JSON samples
+   - `smartctl-healthy.json` - Sample smartctl output
+   - `smartctl-failed.json` - Failed disk sample
+   - `jmicron-healthy.json` - JMicron output sample
 
 ## File Structure
 
 ```
+bin/
+  jmraidstatus          # JMicron SMART query tool
+  smartctl-parser       # smartctl JSON → disk-health JSON
+  disk-health           # Aggregator (reads stdin)
+
 src/
-  # JMicron tool (jmraidstatus binary)
-  jmraidstatus.c          - Main entry point
-  jm_protocol.c           - JMicron protocol
-  jm_commands.c           - JMicron commands
-  hardware_detect.c       - Hardware detection
-
-  # Aggregator (disk-health binary)
-  aggregator.c            - Main entry point
-  subprocess.c            - Subprocess execution
-  aggregator_config.c     - Config parsing
-  aggregator_output.c     - Aggregated output
-  smartctl_parser.c       - Parse smartctl JSON
-
-  # Shared utilities
-  smart_parser.c          - SMART data parsing (shared)
-  smart_attributes.c      - Attribute definitions (shared)
-  output_formatter.c      - Output formatting (shared)
-  config.c                - Config utilities (shared)
-
-  # JMicron-specific (only used by jmraidstatus)
+  # JMicron tool (Phase 1 - DONE)
+  jmraidstatus.c
+  jm_protocol.c
+  jm_commands.c
+  hardware_detect.c
+  smart_parser.c        # Shared by all components
+  smart_attributes.c    # Shared by all components
+  output_formatter.c
+  config.c
   jm_crc.c
   sata_xor.c
 
-  # JSON parser (for aggregator)
-  jsmn/jsmn.h             - Lightweight JSON parser
+  # Parsers (Phase 2)
+  parsers/
+    smartctl_parser.c   # smartctl converter
+    common.c            # Shared parser utilities
+    common.h
+    # Future: storcli_parser.c, nvme_parser.c
 
-bin/
-  jmraidstatus            - JMicron query tool
-  disk-health             - Aggregator (main entry point)
+  # Aggregator (Phase 3)
+  aggregator/
+    disk_health.c       # Main entry point
+    ndjson_reader.c     # Read line-delimited JSON
+    aggregator.c        # Aggregation logic
+    output.c            # Summary/JSON output
+
+  # JSON parser library
+  jsmn/
+    jsmn.h              # Lightweight JSON parser (single header)
+
+examples/
+  single-source.sh      # Example: one RAID array
+  mixed-sources.sh      # Example: RAID + regular drives
+  parallel.sh           # Example: parallel queries
+  cron-monitoring.sh    # Example: scheduled monitoring
+
+docs/
+  AGGREGATOR.md         # disk-health usage guide
+  JSON_API.md           # JSON format documentation
+  PARSERS.md            # Guide for writing new parsers
+
+tests/
+  test_smartctl_parser.c
+  test_aggregator.c
+  integration/
+    test_single_source.sh
+    test_multi_source.sh
+  data/
+    smartctl-healthy.json
+    jmicron-healthy.json
 ```
 
 ## Dependencies
 
 ### Build Dependencies
-- **jsmn**: Lightweight JSON parser (single header, MIT license)
-  - Download: https://github.com/zserge/jsmn/blob/master/jsmn.h
+
+- **jsmn**: Lightweight JSON parser (MIT license)
+  - Single header file: `jsmn.h`
+  - Download: https://github.com/zserge/jsmn
+  - ~500 lines, zero dependencies
   - Place in: `src/jsmn/jsmn.h`
 
 ### Runtime Dependencies
-- **jmraidstatus**: None (self-contained)
-- **disk-health**:
-  - `jmraidstatus` (if querying JMicron controllers)
-  - `smartctl` from smartmontools (if querying regular drives)
+
+**For jmraidstatus**:
+- None (self-contained)
+
+**For smartctl-parser**:
+- None (self-contained)
+- Input comes from smartctl (user must install smartmontools)
+
+**For disk-health**:
+- None (self-contained)
+- Requires compatible JSON input from parsers
 
 ## Benefits of This Architecture
 
-1. **Separation of Concerns**: Each binary does one thing well
-2. **Reusability**: `jmraidstatus` can be used standalone
-3. **Extensibility**: Add new tools by just calling them as subprocesses
-4. **Testing**: Test each component independently
-5. **Unix Philosophy**: Small tools composed together
-6. **No Breaking Changes**: Existing `jmraidstatus` users unaffected
-7. **Flexibility**: Can use `smartctl` directly or via aggregator
+1. ✅ **No Config Files** - Just bash scripts (which users already know)
+2. ✅ **Total Decoupling** - Each component is independent
+3. ✅ **Composability** - Use any bash syntax to combine sources
+4. ✅ **Extensibility** - Add new parsers without touching disk-health
+5. ✅ **Testability** - Test each component with static files
+6. ✅ **Debuggability** - Run each command separately to troubleshoot
+7. ✅ **Unix Philosophy** - Small tools doing one thing well
+8. ✅ **Flexibility** - Users can customize exactly how they want
 
-## Migration Path
+## Example Workflows
 
-**For Existing Users**:
-- `jmraidstatus` continues to work exactly as before
-- JSON output enhanced but backward compatible in structure
-- No action required
+### Daily Monitoring with Cron
 
-**For New Multi-Source Monitoring**:
-1. Install `disk-health` binary
-2. Create config file: `/etc/disk-health.json`
-3. Run: `disk-health` for summary or `disk-health --json` for full output
+`/root/check-disks.sh`:
+```bash
+#!/bin/bash
+LOG=/var/log/disk-health.json
+ERROR_LOG=/var/log/disk-health-errors.log
+
+{
+  jmraidstatus --json-only /dev/sdc 2>>"$ERROR_LOG"
+  smartctl --json=c /dev/sda 2>>"$ERROR_LOG" | smartctl-parser
+  smartctl --json=c /dev/sdb 2>>"$ERROR_LOG" | smartctl-parser
+} | disk-health --json > "$LOG"
+
+# Check exit code and alert if failed
+if [ $? -ne 0 ]; then
+  echo "DISK HEALTH ALERT: Issues detected" | mail -s "Disk Health Alert" admin@example.com
+fi
+```
+
+Add to crontab:
+```
+0 2 * * * /root/check-disks.sh
+```
+
+### Manual Health Check
+
+```bash
+# Quick check (summary)
+{
+  jmraidstatus --json-only /dev/sdc
+  smartctl --json=c /dev/sda | smartctl-parser
+} | disk-health
+
+# Full details (JSON)
+{
+  jmraidstatus --json-only /dev/sdc
+  smartctl --json=c /dev/sda | smartctl-parser
+} | disk-health --json | jq .
+```
+
+### Remote Monitoring
+
+```bash
+# Monitor remote server via SSH
+ssh root@server '{
+  jmraidstatus --json-only /dev/sdc
+  smartctl --json=c /dev/sda | smartctl-parser
+}' | disk-health
+```
+
+## Implementation Timeline
+
+- ✅ **Phase 1**: Update jmraidstatus JSON output (COMPLETED)
+- ⏳ **Phase 2**: Create smartctl-parser (2-3 hours)
+- ⏳ **Phase 3**: Create disk-health aggregator (3-4 hours)
+- ⏳ **Phase 4**: Build system updates (1 hour)
+- ⏳ **Phase 5**: Documentation (2 hours)
+- ⏳ **Phase 6**: Testing (2-3 hours)
+
+**Total Estimate**: 10-13 hours remaining
 
 ## Future Extensions
 
-This architecture easily supports:
-- **Additional Tools**: MegaRAID (storcli), Adaptec (arcconf), NVMe (nvme-cli)
-- **Remote Monitoring**: SSH to remote hosts, call tools remotely
-- **Caching**: Cache results, periodic monitoring
-- **Alerting**: Email/webhook notifications
-- **Web UI**: Dashboard reading JSON output
+This architecture makes it trivial to add:
 
-## Implementation Order
-
-1. ✅ Phase 1: Update `jmraidstatus` JSON output (1-2 hours)
-2. ✅ Phase 2: Create aggregator binary skeleton (2-3 hours)
-3. ✅ Phase 3: Build system updates (1 hour)
-4. ✅ Phase 4: smartctl integration (2-3 hours)
-5. ✅ Phase 5: Documentation (2 hours)
-6. ✅ Phase 6: Testing (2-3 hours)
-
-**Total Estimate**: 10-14 hours
-
-## Notes
-
-- Remove backend abstraction files created earlier (not needed with separate binaries)
-- Keep existing JMicron code unchanged (except JSON output enhancements)
-- Aggregator is a new, independent binary
-- Both binaries can be installed and used independently
+- **Additional parsers**: storcli, nvme-cli, arcconf, etc.
+- **Custom formatters**: HTML, Prometheus metrics, InfluxDB line protocol
+- **Alerting**: Wrapper scripts with email/webhook notifications
+- **Web dashboard**: Read JSON output and display in browser
+- **Historical tracking**: Store JSON outputs, trend analysis
