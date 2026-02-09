@@ -18,7 +18,9 @@
 #include "config.h"
 #include "hardware_detect.h"
 
-#define VERSION "1.0"
+#ifndef VERSION
+#define VERSION "unknown"
+#endif
 #define DEFAULT_SECTOR 33 /* Original sector from jmraidcon - most compatible */
 
 /* Command-line options structure */

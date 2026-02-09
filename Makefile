@@ -1,10 +1,16 @@
 CC = gcc
-CFLAGS = -g -O2 -Wall -Wextra -std=gnu99 -I$(SRCDIR)/jsmn
+VERSION := $(shell cat VERSION 2>/dev/null || echo "unknown")
+CFLAGS = -g -O2 -Wall -Wextra -std=gnu99 -I$(SRCDIR)/jsmn -DVERSION=\"$(VERSION)\"
+CFLAGS_RELEASE = -O3 -Wall -Wextra -std=gnu99 -I$(SRCDIR)/jsmn -DVERSION=\"$(VERSION)\" -DNDEBUG
 SRCDIR = src
 BINDIR = bin
 OBJDIR = $(BINDIR)/obj
 TESTDIR = tests
 TESTBINDIR = $(BINDIR)/tests
+
+# Automatic dependency generation
+DEPDIR = $(OBJDIR)/.deps
+DEPFLAGS = -MMD -MP -MF $(DEPDIR)/$*.d
 
 # JMicron tool sources
 JMICRON_SOURCES = $(SRCDIR)/jmraidstatus.c \
@@ -42,10 +48,11 @@ TARGETS = $(BINDIR)/jmraidstatus $(BINDIR)/smartctl-parser $(BINDIR)/disk-health
 
 # Help target
 help:
-	@echo "jm-raid-status Build System"
+	@echo "jm-raid-status Build System (v$(VERSION))"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  make              - Build all binaries (default)"
+	@echo "  make              - Build all binaries (default, debug mode)"
+	@echo "  make release      - Build optimized release binaries"
 	@echo "  make clean        - Remove all build artifacts"
 	@echo "  make test         - Run integration tests"
 	@echo "  make install      - Install binaries to /usr/local/bin"
@@ -55,6 +62,10 @@ help:
 	@echo "  bin/jmraidstatus   - JMicron RAID SMART query tool"
 	@echo "  bin/smartctl-parser - Convert smartctl JSON to disk-health format"
 	@echo "  bin/disk-health     - Multi-source SMART aggregator"
+	@echo ""
+	@echo "Build modes:"
+	@echo "  make              - Debug build (-g -O2)"
+	@echo "  make release      - Release build (-O3, stripped)"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test          - Run all integration tests"
@@ -75,9 +86,15 @@ $(BINDIR)/disk-health: $(DISK_HEALTH_OBJECTS) | $(BINDIR)
 	$(CC) $(CFLAGS) $(DISK_HEALTH_OBJECTS) -o $@
 	@echo "Built: $@"
 
-$(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+$(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR) $(DEPDIR)
+	@mkdir -p $(dir $@) $(dir $(DEPDIR)/$*)
+	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
+
+$(DEPDIR):
+	@mkdir -p $(DEPDIR) $(DEPDIR)/parsers $(DEPDIR)/aggregator
+
+# Include dependency files
+-include $(shell find $(DEPDIR) -name '*.d' 2>/dev/null)
 
 $(BINDIR):
 	@mkdir -p $(BINDIR)
@@ -136,6 +153,13 @@ $(TOOLSBINDIR):
 clean-tools:
 	-rm -rf $(TOOLSBINDIR)
 
+# Release build (optimized, no debug symbols)
+release: CFLAGS := $(CFLAGS_RELEASE)
+release: clean $(TARGETS)
+	@echo "Built release binaries (optimized)"
+	@strip $(TARGETS)
+	@echo "Stripped debug symbols"
+
 # Integration tests
 integration-tests: $(TARGETS)
 	@echo "Running integration tests..."
@@ -144,4 +168,4 @@ integration-tests: $(TARGETS)
 # Alias for integration tests
 test: integration-tests
 
-.PHONY: all clean install tests clean-tests tools clean-tools integration-tests test help
+.PHONY: all clean install tests clean-tests tools clean-tools integration-tests test help release

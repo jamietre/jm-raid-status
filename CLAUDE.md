@@ -2,16 +2,30 @@
 
 ## Project Overview
 
-SMART health monitoring tool for JMicron RAID controllers using reverse-engineered proprietary protocol. Reads individual disk SMART data from behind hardware RAID controllers where smartctl cannot reach.
+Multi-source SMART health monitoring platform with three complementary tools:
+
+1. **jmraidstatus** - JMicron RAID controller monitor using reverse-engineered proprietary protocol. Reads individual disk SMART data from behind hardware RAID controllers where smartctl cannot reach.
+
+2. **smartctl-parser** - Converts smartctl JSON output to a common format for aggregation.
+
+3. **disk-health** - Multi-source aggregator that combines SMART data from JMicron arrays and individual drives into unified reports.
+
+**Architecture**: Unix pipe-based composition using NDJSON (Newline-Delimited JSON) format:
+```bash
+{
+  sudo jmraidstatus --json-only /dev/sdc
+  smartctl --json=c --all /dev/sda | smartctl-parser
+} | disk-health
+```
 
 ## Key Documentation
 
-1. **PROTOCOL.md** - Complete reverse-engineered protocol documentation
+1. **docs/PROTOCOL.md** - Complete reverse-engineered protocol documentation
    - Command formats, response structures, CRC validation
    - **CRITICAL**: RAID degradation flag at offset 0x1F0
    - Safety considerations and sector selection
 
-2. **SECTOR_USAGE.md** - Technical details about sector-as-mailbox communication
+2. **docs/SECTOR_USAGE.md** - Technical details about sector-as-mailbox communication
    - Why sector 1024 is used (changed from original 0x21 for safety)
    - Risks and safety mechanisms
    - HD Sentinel data loss incident
@@ -19,14 +33,18 @@ SMART health monitoring tool for JMicron RAID controllers using reverse-engineer
 3. **README.md** - User-facing documentation
    - Installation, usage, examples
    - Warnings about data loss risks
+   - Multi-source monitoring examples
 
-4. **QUICK_START.md** - Quick reference for end users
-
-5. **docs/JSON_API.md** - JSON output schema and API documentation
+4. **docs/JSON_API.md** - JSON output schema and API documentation
    - Complete field descriptions and possible values
    - Exit code mappings
    - Scripting examples
    - **MUST be updated when JSON output changes**
+
+5. **docs/MULTI_SOURCE_PLAN.md** - Multi-source architecture implementation plan
+   - Unix pipe-based composition design
+   - NDJSON format specification
+   - Three-binary architecture rationale
 
 ## Critical Protocol Discovery
 
@@ -56,24 +74,64 @@ SMART health monitoring tool for JMicron RAID controllers using reverse-engineer
 
 ## Project Structure
 
+### Overview
+
+Three separate binaries with Unix pipe-based composition:
+1. **jmraidstatus** - JMicron RAID controller monitor
+2. **smartctl-parser** - Converts smartctl JSON to common format
+3. **disk-health** - Multi-source aggregator
+
 ```
 src/
-  jmraidstatus.c      - Main CLI tool, argument parsing, USB detection
+  # JMicron RAID monitor (jmraidstatus binary)
+  jmraidstatus.c      - Main CLI tool, argument parsing
   jm_protocol.c       - Low-level sector I/O, SG_IO, CRC validation
   jm_commands.c       - IDENTIFY, SMART commands, degraded detection
+  jm_crc.c           - CRC-32 checksum
+  sata_xor.c         - XOR parity calculations
+  hardware_detect.c   - JMicron USB hardware detection
+
+  # Shared SMART parsing (used by all binaries)
   smart_parser.c      - Parse SMART attribute data
   smart_attributes.c  - Attribute definitions and health assessment
   output_formatter.c  - Summary, full, JSON output formats
-  jm_crc.c           - CRC-32 checksum
-  sata_xor.c         - XOR parity calculations
+  config.c           - Configuration file parsing
+
+  # smartctl-parser binary
+  parsers/
+    smartctl_parser.c - Convert smartctl JSON to disk-health format
+    common.c          - Shared JSON utilities
+
+  # disk-health aggregator binary
+  aggregator/
+    disk_health.c     - Multi-source SMART aggregator
+
+  # Dependencies
+  jsmn/
+    jsmn.h           - Lightweight JSON parser (single header)
 
 tests/
-  check_sectors      - Shell script to find safe sectors
-  data/              - Raw protocol captures for analysis
+  check_sectors            - Shell script to find safe sectors
+  integration/
+    test_aggregator.sh     - Integration test suite (12 tests)
+  data/
+    jmicron/              - Sample JMicron RAID JSON outputs
+      healthy-4disk.json
+      degraded-3disk.json
+      failed-disk.json
+    smartctl/             - Sample smartctl JSON outputs
+      healthy-ssd.json
 
-docs/ (in root)
-  PROTOCOL.md        - Protocol reverse engineering documentation
-  SECTOR_USAGE.md    - Safety and sector selection details
+examples/
+  mixed-sources.sh        - Example multi-source monitoring script
+
+docs/
+  PROTOCOL.md             - Protocol reverse engineering documentation
+  SECTOR_USAGE.md         - Safety and sector selection details
+  JSON_API.md             - JSON output schema documentation
+  MULTI_SOURCE_PLAN.md    - Multi-source implementation plan
+  CONTRIBUTING.md         - Contribution guidelines
+  PROJECT_STRUCTURE.md    - Historical project structure notes
 ```
 
 ## Hardware Tested
@@ -93,10 +151,18 @@ docs/ (in root)
 
 ### Building
 ```bash
-make              # Build
+make              # Build all three binaries (debug mode)
+make release      # Build optimized release binaries (-O3, stripped)
 make clean        # Clean build artifacts
-make install      # Install to /usr/local/bin (requires sudo)
+make test         # Run integration tests (12 tests)
+make install      # Install all three binaries to /usr/local/bin (requires sudo)
+make help         # Show all available targets
 ```
+
+Binaries are built to:
+- `bin/jmraidstatus` - JMicron RAID monitor
+- `bin/smartctl-parser` - smartctl converter
+- `bin/disk-health` - Multi-source aggregator
 
 ### Testing Degraded Detection
 
