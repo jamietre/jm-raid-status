@@ -27,8 +27,16 @@ SMARTCTL_PARSER_SOURCES = $(SRCDIR)/parsers/smartctl_parser.c \
 
 SMARTCTL_PARSER_OBJECTS = $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(SMARTCTL_PARSER_SOURCES))
 
+# disk-health aggregator sources
+DISK_HEALTH_SOURCES = $(SRCDIR)/aggregator/disk_health.c \
+                      $(SRCDIR)/parsers/common.c \
+                      $(SRCDIR)/smart_parser.c \
+                      $(SRCDIR)/smart_attributes.c
+
+DISK_HEALTH_OBJECTS = $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(DISK_HEALTH_SOURCES))
+
 # All targets
-TARGETS = $(BINDIR)/jmraidstatus $(BINDIR)/smartctl-parser
+TARGETS = $(BINDIR)/jmraidstatus $(BINDIR)/smartctl-parser $(BINDIR)/disk-health
 
 all: $(TARGETS)
 
@@ -38,6 +46,10 @@ $(BINDIR)/jmraidstatus: $(JMICRON_OBJECTS) | $(BINDIR)
 
 $(BINDIR)/smartctl-parser: $(SMARTCTL_PARSER_OBJECTS) | $(BINDIR)
 	$(CC) $(CFLAGS) $(SMARTCTL_PARSER_OBJECTS) -o $@
+	@echo "Built: $@"
+
+$(BINDIR)/disk-health: $(DISK_HEALTH_OBJECTS) | $(BINDIR)
+	$(CC) $(CFLAGS) $(DISK_HEALTH_OBJECTS) -o $@
 	@echo "Built: $@"
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
@@ -56,6 +68,7 @@ clean:
 install: $(TARGETS)
 	install -D -m 755 $(BINDIR)/jmraidstatus $(DESTDIR)/usr/local/bin/jmraidstatus
 	install -D -m 755 $(BINDIR)/smartctl-parser $(DESTDIR)/usr/local/bin/smartctl-parser
+	install -D -m 755 $(BINDIR)/disk-health $(DESTDIR)/usr/local/bin/disk-health
 
 # Unit tests
 TEST_SOURCES = $(wildcard $(TESTDIR)/test_*.c)
