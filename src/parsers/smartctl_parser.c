@@ -8,8 +8,7 @@
  * Output: Single line of compact JSON in disk-health format
  */
 
-#define JSMN_PARENT_LINKS
-#define JSMN_HEADER
+#define JSMN_STATIC
 #include "../jsmn/jsmn.h"
 #include "common.h"
 #include "../smart_parser.h"
@@ -55,46 +54,126 @@ static int parse_smartctl_json(const char* json, smartctl_data_t* data) {
 
     memset(data, 0, sizeof(smartctl_data_t));
 
-    /* Simple linear scan through all tokens */
-    for (int i = 1; i < num_tokens; i++) {
-        if (tokens[i].type != JSMN_STRING) continue;
+    /* Simple linear scan - in jsmn, keys and values are sequential tokens */
+    for (int i = 0; i < num_tokens - 1; i++) {
+        jsmntok_t* t = &tokens[i];
 
-        /* Check if this is a key we care about */
-        if (json_token_streq(json, &tokens[i], "name") && tokens[i].parent == 1) {
-            /* Check parent is "device" object */
-            for (int j = i - 1; j >= 0; j--) {
-                if (json_token_streq(json, &tokens[j], "device")) {
-                    json_token_tostr(json, &tokens[i + 1], data->device, sizeof(data->device));
+        if (t->type != JSMN_STRING) continue;
+
+        /* Top-level fields */
+        if (json_token_streq(json, t, "model_name")) {
+            json_token_tostr(json, &tokens[i + 1], data->model, sizeof(data->model));
+        }
+        else if (json_token_streq(json, t, "serial_number")) {
+            json_token_tostr(json, &tokens[i + 1], data->serial, sizeof(data->serial));
+        }
+        else if (json_token_streq(json, t, "firmware_version")) {
+            json_token_tostr(json, &tokens[i + 1], data->firmware, sizeof(data->firmware));
+        }
+        /* device.name */
+        else if (json_token_streq(json, t, "device") && tokens[i + 1].type == JSMN_OBJECT) {
+            /* Look for "name" key within this object */
+            int obj_end = tokens[i + 1].end;
+            for (int j = i + 2; j < num_tokens && tokens[j].start < obj_end; j++) {
+                if (json_token_streq(json, &tokens[j], "name")) {
+                    json_token_tostr(json, &tokens[j + 1], data->device, sizeof(data->device));
                     break;
                 }
             }
         }
-        else if (json_token_streq(json, &tokens[i], "model_name")) {
-            json_token_tostr(json, &tokens[i + 1], data->model, sizeof(data->model));
+        /* user_capacity.bytes */
+        else if (json_token_streq(json, t, "user_capacity") && tokens[i + 1].type == JSMN_OBJECT) {
+            int obj_end = tokens[i + 1].end;
+            for (int j = i + 2; j < num_tokens && tokens[j].start < obj_end; j++) {
+                if (json_token_streq(json, &tokens[j], "bytes")) {
+                    json_token_touint64(json, &tokens[j + 1], &data->size_bytes);
+                    break;
+                }
+            }
         }
-        else if (json_token_streq(json, &tokens[i], "serial_number")) {
-            json_token_tostr(json, &tokens[i + 1], data->serial, sizeof(data->serial));
+        /* temperature.current */
+        else if (json_token_streq(json, t, "temperature") && tokens[i + 1].type == JSMN_OBJECT) {
+            int obj_end = tokens[i + 1].end;
+            for (int j = i + 2; j < num_tokens && tokens[j].start < obj_end; j++) {
+                if (json_token_streq(json, &tokens[j], "current")) {
+                    json_token_toint(json, &tokens[j + 1], &data->temperature);
+                    data->has_temperature = 1;
+                    break;
+                }
+            }
         }
-        else if (json_token_streq(json, &tokens[i], "firmware_version")) {
-            json_token_tostr(json, &tokens[i + 1], data->firmware, sizeof(data->firmware));
-        }
-        else if (json_token_streq(json, &tokens[i], "bytes") && tokens[i].parent > 0) {
-            /* Check if parent is user_capacity */
-            int parent_idx = tokens[i].parent;
-            if (parent_idx > 0) {
-                for (int j = parent_idx - 1; j >= 0; j--) {
-                    if (json_token_streq(json, &tokens[j], "user_capacity")) {
-                        json_token_touint64(json, &tokens[i + 1], &data->size_bytes);
-                        break;
+        /* ata_smart_attributes.table array */
+        else if (json_token_streq(json, t, "ata_smart_attributes") && tokens[i + 1].type == JSMN_OBJECT) {
+            int obj_end = tokens[i + 1].end;
+            for (int j = i + 2; j < num_tokens && tokens[j].start < obj_end; j++) {
+                if (json_token_streq(json, &tokens[j], "table") && tokens[j + 1].type == JSMN_ARRAY) {
+                    /* Parse array of SMART attributes */
+                    int array_end = tokens[j + 1].end;
+                    int k = j + 2;  /* First element after array token */
+
+                    while (k < num_tokens && tokens[k].start < array_end &&
+                           data->num_attributes < MAX_SMART_ATTRIBUTES) {
+                        if (tokens[k].type == JSMN_OBJECT) {
+                            parsed_smart_attribute_t* attr = &data->attributes[data->num_attributes];
+                            memset(attr, 0, sizeof(parsed_smart_attribute_t));
+
+                            int attr_end = tokens[k].end;
+                            /* Parse this attribute object */
+                            for (int m = k + 1; m < num_tokens && tokens[m].start < attr_end; m++) {
+                                if (json_token_streq(json, &tokens[m], "id")) {
+                                    int id;
+                                    json_token_toint(json, &tokens[m + 1], &id);
+                                    attr->id = (uint8_t)id;
+                                }
+                                else if (json_token_streq(json, &tokens[m], "value")) {
+                                    int val;
+                                    json_token_toint(json, &tokens[m + 1], &val);
+                                    attr->current_value = (uint8_t)val;
+                                }
+                                else if (json_token_streq(json, &tokens[m], "worst")) {
+                                    int val;
+                                    json_token_toint(json, &tokens[m + 1], &val);
+                                    attr->worst_value = (uint8_t)val;
+                                }
+                                else if (json_token_streq(json, &tokens[m], "thresh")) {
+                                    int val;
+                                    json_token_toint(json, &tokens[m + 1], &val);
+                                    attr->threshold = (uint8_t)val;
+                                }
+                                else if (json_token_streq(json, &tokens[m], "raw") &&
+                                         tokens[m + 1].type == JSMN_OBJECT) {
+                                    /* raw.value */
+                                    int raw_end = tokens[m + 1].end;
+                                    for (int n = m + 2; n < num_tokens && tokens[n].start < raw_end; n++) {
+                                        if (json_token_streq(json, &tokens[n], "value")) {
+                                            json_token_touint64(json, &tokens[n + 1], &attr->raw_value);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            /* Get attribute definition for name and criticality */
+                            const smart_attribute_def_t* def = get_attribute_definition(attr->id);
+                            if (def) {
+                                attr->name = def->name;
+                                attr->is_critical = def->is_critical;
+                            }
+
+                            data->num_attributes++;
+
+                            /* Skip to end of this object */
+                            k++;
+                            while (k < num_tokens && tokens[k].start < attr_end) k++;
+                        } else {
+                            k++;
+                        }
                     }
+                    break;
                 }
             }
         }
     }
-
-    /* TODO: Parse temperature and SMART attributes
-     * For now, basic disk info is sufficient to demonstrate the architecture */
-    (void)num_tokens;  /* Suppress unused warning */
 
     return 0;
 }
