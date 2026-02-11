@@ -150,7 +150,7 @@ d = json.load(sys.stdin)
 assert d['summary']['total_disks'] == 5, 'Expected 5 total disks'
 assert d['summary']['healthy_disks'] == 5, 'Expected 5 healthy disks'
 assert d['summary']['failed_disks'] == 0, 'Expected 0 failed disks'
-assert d['summary']['overall_status'] == 'passed', 'Expected passed status'
+assert d['summary']['overall_status'] == 'healthy', 'Expected healthy status'
 " 2>/dev/null; then
     test_pass
 else

@@ -136,7 +136,7 @@ static int parse_disk_health_line(const char* line, source_result_t* result) {
                         else if (json_token_streq(line, &tokens[m], "overall_status")) {
                             char status[16];
                             json_token_tostr(line, &tokens[m + 1], status, sizeof(status));
-                            if (strcmp(status, "passed") == 0) {
+                            if (strcmp(status, "healthy") == 0) {
                                 disk->overall_status = DISK_STATUS_PASSED;
                             } else if (strcmp(status, "failed") == 0) {
                                 disk->overall_status = DISK_STATUS_FAILED;
@@ -242,7 +242,7 @@ static void output_json(const aggregated_report_t* report) {
         printf("      },\n");
         printf("      \"num_disks\": %d,\n", src->num_disks);
         printf("      \"status\": \"%s\"\n",
-               src->overall_status == DISK_STATUS_PASSED ? "passed" : "failed");
+               src->overall_status == DISK_STATUS_PASSED ? "healthy" : "failed");
         printf("    }");
     }
     printf("\n  ],\n");
@@ -252,7 +252,7 @@ static void output_json(const aggregated_report_t* report) {
     printf("    \"healthy_disks\": %d,\n", report->healthy_disks);
     printf("    \"failed_disks\": %d,\n", report->failed_disks);
     printf("    \"overall_status\": \"%s\"\n",
-           report->overall_status == DISK_STATUS_PASSED ? "passed" : "failed");
+           report->overall_status == DISK_STATUS_PASSED ? "healthy" : "failed");
     printf("  }\n");
     printf("}\n");
 }

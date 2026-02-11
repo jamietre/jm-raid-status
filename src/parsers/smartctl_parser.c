@@ -186,7 +186,7 @@ static void output_disk_health_json(const smartctl_data_t* data) {
     get_timestamp(timestamp, sizeof(timestamp));
 
     /* Determine overall status (simple check: any threshold failures?) */
-    const char* overall_status = "passed";
+    const char* overall_status = "healthy";
     for (int i = 0; i < data->num_attributes; i++) {
         const parsed_smart_attribute_t* attr = &data->attributes[i];
         if (attr->threshold > 0 && attr->current_value < attr->threshold) {
