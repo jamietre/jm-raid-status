@@ -80,11 +80,11 @@ Each disk in the `disks` array represents a physical drive:
 ```json
 {
   "disk_number": 0,
-  "name": "WDC WD80EFZZ-68BTXN0",
-  "serial_number": "ABCD1234",
-  "firmware_revision": "83.H0A83",
+  "model": "WDC WD80EFZZ-68BTXN0",
+  "serial": "ABCD1234",
+  "firmware": "83.H0A83",
   "size_mb": 7630885,
-  "status": "PASSED",
+  "overall_status": "healthy",
   "temperature_celsius": 35,
   "power_on_hours": 12543,
   "attributes": [ ... ]
@@ -96,11 +96,11 @@ Each disk in the `disks` array represents a physical drive:
 | Field | Type | Description |
 |-------|------|-------------|
 | `disk_number` | integer | Disk slot number (0-4) |
-| `name` | string | Disk model name/identifier |
-| `serial_number` | string | Disk serial number (may be absent if unavailable) |
-| `firmware_revision` | string | Firmware version (may be absent if unavailable) |
+| `model` | string | Disk model name/identifier |
+| `serial` | string | Disk serial number (may be absent if unavailable) |
+| `firmware` | string | Firmware version (may be absent if unavailable) |
 | `size_mb` | integer | Disk capacity in megabytes (may be absent if unavailable) |
-| `status` | string | Overall disk health status (see values below) |
+| `overall_status` | string | Overall disk health status (see values below) |
 | `temperature_celsius` | integer | Current temperature in Celsius (may be absent) |
 | `power_on_hours` | integer | Total power-on hours (may be absent) |
 | `attributes` | array | SMART attributes (see below) |
@@ -109,9 +109,9 @@ Each disk in the `disks` array represents a physical drive:
 
 | Value | Meaning | Description |
 |-------|---------|-------------|
-| `"PASSED"` | Healthy | All SMART attributes within acceptable range |
-| `"FAILED"` | Failed | One or more critical attributes exceed thresholds |
-| `"ERROR"` | Error | Could not retrieve SMART data for this disk |
+| `"healthy"` | Healthy | All SMART attributes within acceptable range |
+| `"failed"` | Failed | One or more critical attributes exceed thresholds |
+| `"error"` | Error | Could not retrieve SMART data for this disk |
 
 ## SMART Attribute Object
 
@@ -121,11 +121,11 @@ Each attribute in a disk's `attributes` array:
 {
   "id": 5,
   "name": "Reallocated_Sector_Ct",
-  "current": 200,
+  "value": 200,
   "worst": 200,
-  "threshold": 140,
-  "raw_value": 0,
-  "status": "OK",
+  "thresh": 140,
+  "raw": 0,
+  "status": "ok",
   "critical": true
 }
 ```
@@ -136,10 +136,10 @@ Each attribute in a disk's `attributes` array:
 |-------|------|-------------|
 | `id` | integer | SMART attribute ID (hex, e.g., 5 = 0x05) |
 | `name` | string | Human-readable attribute name |
-| `current` | integer | Current normalized value (0-255) |
+| `value` | integer | Current normalized value (0-255) |
 | `worst` | integer | Worst value ever recorded (0-255) |
-| `threshold` | integer | Manufacturer failure threshold (0-255) |
-| `raw_value` | integer | Raw value (meaning varies by attribute) |
+| `thresh` | integer | Manufacturer failure threshold (0-255) |
+| `raw` | integer | Raw value (meaning varies by attribute) |
 | `status` | string | Health status of this attribute (see values below) |
 | `critical` | boolean | Whether this attribute is considered critical for disk health |
 
@@ -147,9 +147,9 @@ Each attribute in a disk's `attributes` array:
 
 | Value | Meaning |
 |-------|---------|
-| `"OK"` | Attribute is within acceptable range |
-| `"FAILED"` | Attribute has failed (current ≤ threshold, or critical raw value detected) |
-| `"UNKNOWN"` | Status could not be determined |
+| `"ok"` | Attribute is within acceptable range |
+| `"failed"` | Attribute has failed (value ≤ thresh, or critical raw value detected) |
+| `"unknown"` | Status could not be determined |
 
 ### Common Critical Attributes
 
@@ -183,32 +183,32 @@ Each attribute in a disk's `attributes` array:
   "disks": [
     {
       "disk_number": 0,
-      "name": "WDC WD80EFZZ-68BTXN0",
-      "serial_number": "VGH123AB",
-      "firmware_revision": "83.H0A83",
+      "model": "WDC WD80EFZZ-68BTXN0",
+      "serial": "VGH123AB",
+      "firmware": "83.H0A83",
       "size_mb": 7630885,
-      "status": "PASSED",
+      "overall_status": "healthy",
       "temperature_celsius": 35,
       "power_on_hours": 12543,
       "attributes": [
         {
           "id": 5,
           "name": "Reallocated_Sector_Ct",
-          "current": 200,
+          "value": 200,
           "worst": 200,
-          "threshold": 140,
-          "raw_value": 0,
-          "status": "OK",
+          "thresh": 140,
+          "raw": 0,
+          "status": "ok",
           "critical": true
         },
         {
           "id": 9,
           "name": "Power_On_Hours",
-          "current": 100,
+          "value": 100,
           "worst": 100,
-          "threshold": 0,
-          "raw_value": 12543,
-          "status": "OK",
+          "thresh": 0,
+          "raw": 12543,
+          "status": "ok",
           "critical": false
         }
       ]
@@ -236,17 +236,17 @@ Each attribute in a disk's `attributes` array:
   "disks": [
     {
       "disk_number": 0,
-      "name": "ST8000DM004-2CX188",
-      "status": "FAILED",
+      "model": "ST8000DM004-2CX188",
+      "overall_status": "failed",
       "attributes": [
         {
           "id": 5,
           "name": "Reallocated_Sector_Ct",
-          "current": 140,
+          "value": 140,
           "worst": 140,
-          "threshold": 140,
-          "raw_value": 24,
-          "status": "FAILED",
+          "thresh": 140,
+          "raw": 24,
+          "status": "failed",
           "critical": true
         }
       ]
@@ -262,7 +262,7 @@ The `jmraidstatus` command exits with codes that correspond to the JSON status:
 | Exit Code | Meaning | Corresponds To |
 |-----------|---------|----------------|
 | 0 | Success - All healthy | `raid_status.status == "healthy"` and no failed disks |
-| 1 | Warning/Failure | `raid_status.status == "degraded"` or `"failed"`, or any disk with `status == "FAILED"` |
+| 1 | Warning/Failure | `raid_status.status == "degraded"` or `"failed"`, or any disk with `overall_status == "failed"` |
 | 3 | Error | Device not found, permission denied, communication error, etc. |
 
 ## Usage Examples
@@ -298,8 +298,8 @@ sudo jmraidstatus -j /dev/sdc | jq '.disks[] | select(.disk_number == 2) | .temp
 # Alert if any disk has reallocated sectors
 sudo jmraidstatus -j /dev/sdc | jq -r '
   .disks[] |
-  select(.attributes[]? | select(.id == 5 and .raw_value > 0)) |
-  "ALERT: Disk \(.disk_number) (\(.name)) has \(.attributes[] | select(.id == 5) | .raw_value) reallocated sectors"
+  select(.attributes[]? | select(.id == 5 and .raw > 0)) |
+  "ALERT: Disk \(.disk_number) (\(.model)) has \(.attributes[] | select(.id == 5) | .raw) reallocated sectors"
 '
 ```
 
@@ -329,8 +329,8 @@ if raid_status != 'healthy':
 
 # Check individual disks
 for disk in data['disks']:
-    if disk['status'] == 'FAILED':
-        print(f"CRITICAL: Disk {disk['disk_number']} ({disk['name']}) has failed")
+    if disk['overall_status'] == 'failed':
+        print(f"CRITICAL: Disk {disk['disk_number']} ({disk['model']}) has failed")
         sys.exit(2)
 
     # Check temperature
@@ -347,6 +347,7 @@ sys.exit(0)
 
 | API Version | Tool Version | Changes |
 |-------------|--------------|---------|
+| 1.1 | 2.0+ | Disk fields: `name`→`model`, `serial_number`→`serial`, `firmware_revision`→`firmware`, `status`→`overall_status`. Attribute fields: `current`→`value`, `threshold`→`thresh`, `raw_value`→`raw`. Status values: disk `"PASSED"`→`"healthy"`, attribute `"OK"`→`"ok"` (all lowercase). |
 | 1.0 | 1.0+ | Initial release with `raid_status` object |
 
 ## Notes

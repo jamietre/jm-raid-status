@@ -2,9 +2,26 @@
 
 This directory contains the investigation and validation of JMicron RAID controller status flags.
 
+## Why & How
+
+My use case for creating this is to expand storage on my Synology NAS with the cheap mediasonic enclosure I already own. This works fine, but my NAS is in a dark corner and human eyes only see it when there's a problem. I wouldn't be comfortable with a hardware RAID that only lets me know there's a problem with blinking lights. This tool allows active monitoring of the status of the hard drives in the enclosure, so I can create a scheduled task to poll it and report any issues.
+
+This was written almost entirely by Claude Code, through a process of analyzing the controller query responses, and comparing them to known data about the hard disk SMART status obtained using [Hard Disk Sentinel](https://www.hdsentinel.com/) on Windows, which does have the ability to read the drive details.
+
+Additionally, I forced the array into a degraded state by removing a disk and taking snapshots while degraded and during the rebuild process and compared these to good state snapshots.
+
+It's only been tested against the two Mediasonic HFR2-SU3S2 boxes I own, which have about 6 different kinds of drives. A couple limitations and edge cases were observed:
+
+- I have not determined a way to identify an array in a degraded state (e.g. one drive offline) other than comparing the number of drives reported to the number expected using this process
+- One drive I own did not report manufacturer SMART thresholds; I don't know if this is a problem with the drive or the software/controller, but in this case we use default thresholds
+- There appears to be a flag reported when the array is in the process of rebuilding. This has only been tested once but it was definitely set only during the rebuild process, so I have reasonable confidence.
+
+If you are intrested in experimenting more, the repo includes a number of test script for collecting and comparing data.
+
 ## Summary of Findings
 
 **Confirmed useful flags for monitoring**:
+
 1. **0x1F0** (byte 0) - Disk presence bitmask
 2. **0x1F5** (byte 5) - Rebuild status flag
 
@@ -47,11 +64,11 @@ The 4 critical snapshots that define our understanding:
 
 ## Flag Behavior Verified
 
-| State | 0x1F0 | 0x1F5 | Interpretation |
-|-------|-------|-------|----------------|
-| Healthy (4 disks) | 0x0f | 0x00 | All disks present, not rebuilding |
-| Degraded (3 disks) | 0x07 | 0x00 | One disk missing, not rebuilding |
-| Rebuilding | 0x0f | 0x01 | All disks present, rebuild active |
+| State              | 0x1F0 | 0x1F5 | Interpretation                    |
+| ------------------ | ----- | ----- | --------------------------------- |
+| Healthy (4 disks)  | 0x0f  | 0x00  | All disks present, not rebuilding |
+| Degraded (3 disks) | 0x07  | 0x00  | One disk missing, not rebuilding  |
+| Rebuilding         | 0x0f  | 0x01  | All disks present, rebuild active |
 
 ## Test Configuration
 

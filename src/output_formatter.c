@@ -287,7 +287,8 @@ void format_full_smart(const disk_smart_data_t* disk) {
 }
 
 void format_json(const char* device_path, const disk_smart_data_t* disks, int num_disks,
-                 int expected_array_size, int present_disks, int is_degraded) {
+                 int expected_array_size, int present_disks, int is_degraded,
+                 const char* controller_model) {
     time_t now = time(NULL);
     struct tm* tm_info = gmtime(&now);
     char timestamp[64];
@@ -325,8 +326,15 @@ void format_json(const char* device_path, const disk_smart_data_t* disks, int nu
 
     printf("{\n");
     printf("  \"version\": \"1.0\",\n");
+    printf("  \"backend\": \"jmicron\",\n");
     printf("  \"device\": \"%s\",\n", device_path);
     printf("  \"timestamp\": \"%s\",\n", timestamp);
+
+    /* Controller information */
+    printf("  \"controller\": {\n");
+    printf("    \"model\": \"%s\",\n", controller_model ? controller_model : "Unknown");
+    printf("    \"type\": \"raid_array\"\n");
+    printf("  },\n");
 
     /* RAID status section */
     printf("  \"raid_status\": {\n");
@@ -388,22 +396,30 @@ void format_json(const char* device_path, const disk_smart_data_t* disks, int nu
 
         printf("    {\n");
         printf("      \"disk_number\": %d,\n", i);
-        printf("      \"name\": \"%s\",\n",
+        printf("      \"model\": \"%s\",\n",
                disks[i].disk_name[0] ? disks[i].disk_name : "Unknown");
 
         if (disks[i].serial_number[0] != '\0') {
-            printf("      \"serial_number\": \"%s\",\n", disks[i].serial_number);
+            printf("      \"serial\": \"%s\",\n", disks[i].serial_number);
         }
 
         if (disks[i].firmware_rev[0] != '\0') {
-            printf("      \"firmware_revision\": \"%s\",\n", disks[i].firmware_rev);
+            printf("      \"firmware\": \"%s\",\n", disks[i].firmware_rev);
         }
 
         if (disks[i].size_mb > 0) {
             printf("      \"size_mb\": %llu,\n", (unsigned long long)disks[i].size_mb);
         }
 
-        printf("      \"status\": \"%s\",\n", disk_status_string(disks[i].overall_status));
+        {
+            const char* s;
+            switch (disks[i].overall_status) {
+                case DISK_STATUS_PASSED: s = "healthy"; break;
+                case DISK_STATUS_FAILED: s = "failed";  break;
+                default:                 s = "error";   break;
+            }
+            printf("      \"overall_status\": \"%s\",\n", s);
+        }
 
         int temp = get_temperature(&disks[i]);
         if (temp >= 0) {
@@ -423,11 +439,19 @@ void format_json(const char* device_path, const disk_smart_data_t* disks, int nu
             printf("        {\n");
             printf("          \"id\": %d,\n", attr->id);
             printf("          \"name\": \"%s\",\n", attr->name);
-            printf("          \"current\": %d,\n", attr->current_value);
+            printf("          \"value\": %d,\n", attr->current_value);
             printf("          \"worst\": %d,\n", attr->worst_value);
-            printf("          \"threshold\": %d,\n", attr->threshold);
-            printf("          \"raw_value\": %llu,\n", (unsigned long long)attr->raw_value);
-            printf("          \"status\": \"%s\",\n", attribute_status_string(attr->status));
+            printf("          \"thresh\": %d,\n", attr->threshold);
+            printf("          \"raw\": %llu,\n", (unsigned long long)attr->raw_value);
+            {
+                const char* s;
+                switch (attr->status) {
+                    case ATTR_STATUS_PASSED:  s = "ok";      break;
+                    case ATTR_STATUS_FAILED:  s = "failed";  break;
+                    default:                  s = "unknown"; break;
+                }
+                printf("          \"status\": \"%s\",\n", s);
+            }
             printf("          \"critical\": %s\n", attr->is_critical ? "true" : "false");
             printf("        }%s\n", (j < disks[i].num_attributes - 1) ? "," : "");
         }

@@ -100,7 +100,7 @@ void test_json_valid_structure(void) {
     disks[0].overall_status = DISK_STATUS_PASSED;
 
     setup_output_capture();
-    format_json("/dev/sdX", disks, 1, 0, 0, 0);
+    format_json("/dev/sdX", disks, 1, 0, 0, 0, NULL);
     teardown_output_capture();
 
     const char* output = get_captured_output();
@@ -121,7 +121,7 @@ void test_json_includes_raid_status(void) {
     disks[0].overall_status = DISK_STATUS_PASSED;
 
     setup_output_capture();
-    format_json("/dev/sdX", disks, 1, 4, 3, 1);  /* degraded: expect 4, found 3 */
+    format_json("/dev/sdX", disks, 1, 4, 3, 1, NULL);  /* degraded: expect 4, found 3 */
     teardown_output_capture();
 
     const char* output = get_captured_output();
@@ -147,7 +147,7 @@ void test_json_degraded_with_issues(void) {
     disks[0].overall_status = DISK_STATUS_PASSED;
 
     setup_output_capture();
-    format_json("/dev/sdX", disks, 1, 5, 4, 1);  /* degraded: expect 5, found 4 */
+    format_json("/dev/sdX", disks, 1, 5, 4, 1, NULL);  /* degraded: expect 5, found 4 */
     teardown_output_capture();
 
     const char* output = get_captured_output();
@@ -168,7 +168,7 @@ void test_json_oversized_array(void) {
     }
 
     setup_output_capture();
-    format_json("/dev/sdX", disks, 5, 4, 5, 0);  /* oversized: expect 4, found 5 */
+    format_json("/dev/sdX", disks, 5, 4, 5, 0, NULL);  /* oversized: expect 4, found 5 */
     teardown_output_capture();
 
     const char* output = get_captured_output();
@@ -190,7 +190,7 @@ void test_json_failed_disk(void) {
     disks[0].overall_status = DISK_STATUS_FAILED;
 
     setup_output_capture();
-    format_json("/dev/sdX", disks, 1, 0, 0, 0);  /* single failed disk */
+    format_json("/dev/sdX", disks, 1, 0, 0, 0, NULL);  /* single failed disk */
     teardown_output_capture();
 
     const char* output = get_captured_output();
@@ -213,7 +213,7 @@ void test_json_healthy_no_issues(void) {
     }
 
     setup_output_capture();
-    format_json("/dev/sdX", disks, 4, 4, 4, 0);  /* healthy: all good */
+    format_json("/dev/sdX", disks, 4, 4, 4, 0, NULL);  /* healthy: all good */
     teardown_output_capture();
 
     const char* output = get_captured_output();
@@ -234,7 +234,7 @@ void test_json_no_extraneous_output(void) {
     disks[0].overall_status = DISK_STATUS_PASSED;
 
     setup_output_capture();
-    format_json("/dev/sdX", disks, 1, 5, 4, 1);  /* degraded */
+    format_json("/dev/sdX", disks, 1, 5, 4, 1, NULL);  /* degraded */
     teardown_output_capture();
 
     const char* output = get_captured_output();

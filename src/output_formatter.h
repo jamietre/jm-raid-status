@@ -48,9 +48,11 @@ void format_full_smart(const disk_smart_data_t* disk);
  * @param expected_array_size Expected number of disks (0 = not specified)
  * @param present_disks Number of disks reported by controller (0 = not available)
  * @param is_degraded 1 if RAID is degraded, 0 otherwise
+ * @param controller_model Controller model string (optional, can be NULL)
  */
 void format_json(const char* device_path, const disk_smart_data_t* disks, int num_disks,
-                 int expected_array_size, int present_disks, int is_degraded);
+                 int expected_array_size, int present_disks, int is_degraded,
+                 const char* controller_model);
 
 /**
  * Format and print raw hex dump (original behavior)

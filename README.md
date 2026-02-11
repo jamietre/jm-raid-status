@@ -1,12 +1,16 @@
-# jmraidstatus - SMART Health Monitor for JMicron RAID Controllers
+# jm-raid-status - Multi-Source SMART Health Monitoring
 
-A console tool to monitor disk health in JMicron hardware RAID arrays, including USB-connected external enclosures.
+A comprehensive SMART health monitoring solution for both hardware RAID controllers and individual drives. Monitor JMicron RAID arrays alongside regular SATA/SSD/NVMe drives using a Unix pipe-based architecture.
 
 ## Overview
 
-`jmraidstatus` communicates with JMicron SATA RAID controllers to read SMART (Self-Monitoring, Analysis and Reporting Technology) data from disks behind the controller. Unlike `smartctl` which cannot access disks behind hardware RAID controllers, `jmraidstatus` uses the controller's proprietary protocol to retrieve health information.
+The `jm-raid-status` suite provides comprehensive SMART monitoring across different storage configurations:
 
-This tool uses the reverse-engineered JMicron proprietary protocol to communicate with RAID controllers. It has been tested successfully on:
+- **`jmraidstatus`** communicates with JMicron SATA RAID controllers to read SMART data from disks behind hardware RAID, where `smartctl` cannot reach. It uses the reverse-engineered JMicron proprietary protocol.
+- **`smartctl-parser`** converts `smartctl` JSON output to a common format for aggregation.
+- **`disk-health`** aggregates SMART data from multiple sources, providing unified health reporting across all your storage devices.
+
+### Tested Hardware
 
 - Mediasonic Proraid HFR2-SU3S2 External hardware RAID box (JMB567 controller)
 
@@ -14,39 +18,47 @@ If you use this on other devices, please report your results! Make a pull reques
 
 ## Acknowledgments
 
-This project was inspired by the original [jJMRaidCon by Werner Johansson](https://github.com/wjoe/jmraidcon) (2010), which laid groundwork for reverse engineering of the JMicron protocol.
+This project was inspired by the original [JMRaidCon by Werner Johansson](https://github.com/wjoe/jmraidcon) (2010), which laid groundwork for reverse engineering of the JMicron protocol.
 
 This implementation is a rewrite using the protocol knowledge from that research, with features for SMART parsing, user-friendly output, and modern tooling.
 
 ## Features
 
-- **Read SMART data** from disks behind JMicron RAID controllers
-- **Automatic hardware detection** for USB enclosures
-- **Display human-readable health status** with easy-to-understand summaries
-- **Monitor critical attributes** including:
-  - Reallocated sectors
-  - Pending sectors
-  - Uncorrectable sectors
-  - Drive temperature
-  - Power-on hours
-  - And all other standard SMART attributes
-- **Multiple output formats**:
-  - Summary view (default) - Quick health overview
-  - Full table view - Complete SMART attribute listing
-  - JSON format - For scripting and automation
-- **Exit codes for monitoring systems** - Integrate with monitoring tools
-- **Configurable sector number** - Avoid conflicts with data
+### Three Complementary Tools
+
+1. **`jmraidstatus`** - JMicron RAID controller monitor
+   - Reads SMART data from disks behind JMicron hardware RAID controllers
+   - Automatic USB hardware detection
+   - Works where `smartctl` cannot reach (hardware RAID)
+
+2. **`smartctl-parser`** - smartctl JSON converter
+   - Converts `smartctl --json` output to unified disk-health format
+   - Enables regular SATA/SSD/NVMe drives to work with aggregator
+
+3. **`disk-health`** - Multi-source aggregator
+   - Combines SMART data from multiple sources (JMicron + individual drives)
+   - Unified health assessment across all storage
+   - Summary and JSON output formats
+
+### Key Capabilities
+
+- **Multi-source monitoring** - Monitor RAID arrays and individual drives together
+- **Unix pipe composition** - Flexible bash command grouping for custom setups
+- **Human-readable summaries** - Quick health overview with color-coded status
+- **Critical SMART monitoring** - Temperature, reallocated sectors, power-on hours, etc.
+- **Multiple output formats** - Summary, full table, JSON for automation
+- **Exit codes for monitoring** - Integrate with alerting systems (Nagios, Zabbix, etc.)
 
 ## Possible Risk
 
-**The JMicron protocol uses a disk sector as a communication channel** (default: sector 33). The tool temporarily writes commands to this sector and reads responses back. To protect your data:
+**The JMicron protocol writes to a disk sector as a communication channel** (default: sector 33). The tool temporarily writes commands to this sector and reads responses back. To protect your data:
 
 - **The tool refuses to run if the sector contains any data** - this safety check cannot be bypassed
 - Sector contents are verified as empty before any operations
 - The sector is restored to zeros after communication completes
 - Signal handlers ensure cleanup even if interrupted (Ctrl+C, crashes, etc.)
 
-See [SECTOR_USAGE.md](SECTOR_USAGE.md) for detailed technical explanation of the protocol and safety mechanisms.
+See [docs/SECTOR_USAGE.md](docs/SECTOR_USAGE.md) for detailed technical explanation of the protocol and safety mechanisms.
 
 **Historical context:** Early implementations of this protocol (including [Hard Disk Sentinel](https://www.hdsentinel.com/)) experienced RAID array failures in at least one case, likely due to overwriting in-use sectors. This implementation includes safety checks specifically designed to prevent this issue. However, as with any tool that interacts destructively with storage hardware, **ensure you have current backups before first use**.
 
@@ -72,7 +84,11 @@ cd jm-raid-status
 make
 ```
 
-The binary will be built to `bin/jmraidstatus`.
+Three binaries will be built to `bin/`:
+
+- `jmraidstatus` - JMicron RAID controller monitor
+- `smartctl-parser` - smartctl JSON converter
+- `disk-health` - Multi-source aggregator
 
 ### Installation (optional)
 
@@ -80,7 +96,7 @@ The binary will be built to `bin/jmraidstatus`.
 sudo make install
 ```
 
-This installs `jmraidstatus` to `/usr/local/bin/`.
+This installs all three binaries to `/usr/local/bin/`.
 
 ## Usage
 
@@ -88,7 +104,7 @@ This installs `jmraidstatus` to `/usr/local/bin/`.
 jmraidstatus [OPTIONS] /dev/sdX
 ```
 
-### Options
+### Options (jmraidstatus)
 
 - `-h, --help` - Show help message
 - `-v, --version` - Show version information
@@ -97,6 +113,7 @@ jmraidstatus [OPTIONS] /dev/sdX
 - `-s, --summary` - Show summary only (default)
 - `-f, --full` - Show full SMART attribute table
 - `-j, --json` - Output in JSON format
+- `--json-only` - JSON output only (no headers, for piping to `disk-health`)
 - `-r, --raw` - Dump raw protocol data to stderr (for debugging/investigation)
 - `-q, --quiet` - Minimal output (exit code only)
 - `--verbose` - Verbose output with debug info
@@ -175,6 +192,110 @@ sudo jmraidstatus --config /etc/jmraidstatus.json /dev/sdc
 - `2` - Critical condition detected (e.g., failing disk, uncorrectable sectors)
 - `3` - Error (device not found, permission denied, communication error)
 
+## Multi-Source Monitoring
+
+Monitor JMicron RAID arrays alongside regular SATA/SSD/NVMe drives using Unix pipe composition.
+
+### Architecture
+
+The three binaries work together via stdin/stdout pipes:
+
+- **Sources** (`jmraidstatus`, `smartctl`) output JSON to stdout
+- **Converter** (`smartctl-parser`) transforms smartctl JSON to common format
+- **Aggregator** (`disk-health`) reads multiple JSON inputs, reports overall health
+
+### Usage Examples
+
+**Monitor RAID + two individual drives:**
+
+```bash
+{
+  sudo jmraidstatus --json-only /dev/sdc
+  smartctl --json=c --all /dev/sda | smartctl-parser
+  smartctl --json=c --all /dev/sdb | smartctl-parser
+} | disk-health
+```
+
+**JSON output for automation:**
+
+```bash
+{
+  sudo jmraidstatus --json-only /dev/sdc
+  smartctl --json=c --all /dev/sda | smartctl-parser
+} | disk-health --json > health-report.json
+```
+
+**Quiet mode (exit codes only):**
+
+```bash
+{
+  sudo jmraidstatus --json-only /dev/sdc
+  smartctl --json=c --all /dev/sda | smartctl-parser
+} | disk-health --quiet
+echo $?  # 0=healthy, 1=failed, 3=error
+```
+
+**Example script (examples/mixed-sources.sh):**
+
+```bash
+#!/bin/bash
+# Monitor RAID array + standalone drives
+{
+  sudo jmraidstatus --json-only /dev/sdc
+  smartctl --json=c --all /dev/sda | smartctl-parser
+  smartctl --json=c --all /dev/sdb | smartctl-parser
+} | disk-health "$@"
+```
+
+### Output Format
+
+**Text Summary (default):**
+
+```
+=== Disk Health Summary ===
+Sources: 3
+Total Disks: 6
+Healthy: 5
+Failed: 1
+
+Overall Status: FAILED
+
+[Details for each source...]
+```
+
+**JSON Output (`--json`):**
+
+```json
+{
+  "version": "1.0",
+  "sources": [
+    {
+      "backend": "jmicron",
+      "device": "/dev/sdc",
+      "raid_status": {"status": "healthy", ...},
+      "disks": [...]
+    },
+    {
+      "backend": "smartctl",
+      "device": "/dev/sda",
+      "disks": [...]
+    }
+  ],
+  "summary": {
+    "total_disks": 5,
+    "healthy_disks": 5,
+    "failed_disks": 0,
+    "overall_status": "passed"
+  }
+}
+```
+
+### Exit Codes (disk-health)
+
+- `0` - All disks healthy across all sources
+- `1` - One or more disks failed health check
+- `3` - No valid sources or error reading input
+
 ## Sample Output
 
 ### Summary View (Default)
@@ -244,7 +365,7 @@ jmraidstatus uses Linux SCSI Generic (SG_IO) ioctls to communicate with the RAID
 5. **Assesses disk health** - Evaluates critical attributes for warnings/failures
 6. **Restores sector** - Writes zeros back to the sector (cleanup phase)
 
-**⚠️ IMPORTANT**: The tool **temporarily overwrites an unused sector** (default: 33) during the 1-3 seconds it runs. The tool **will refuse to run** if the sector contains any data. If somehow interrupted before completion, that sector remains corrupted. See **[SECTOR_USAGE.md](SECTOR_USAGE.md)** for detailed technical explanation and risks.
+**⚠️ IMPORTANT**: The tool **temporarily overwrites an unused sector** (default: 33) during the 1-3 seconds it runs. The tool **will refuse to run** if the sector contains any data. If somehow interrupted before completion, that sector remains corrupted. See **[docs/SECTOR_USAGE.md](docs/SECTOR_USAGE.md)** for detailed technical explanation and risks.
 
 ### SMART Health Assessment
 
@@ -273,11 +394,13 @@ The tool evaluates disk health using these criteria:
 You can customize the health assessment thresholds using a configuration file:
 
 **Generate default config:**
+
 ```bash
 sudo jmraidstatus --write-default-config /etc/jmraidstatus.json
 ```
 
 **Example config file:**
+
 ```json
 {
   "use_manufacturer_thresholds": true,
@@ -298,16 +421,19 @@ sudo jmraidstatus --write-default-config /etc/jmraidstatus.json
 ```
 
 **Configuration options:**
+
 - `use_manufacturer_thresholds`: If `true`, also check drive's built-in thresholds (default: `true`)
 - `temperature.critical`: Temperature in °C to consider critical (default: 60)
 - `attributes.0xNN.raw_critical`: Fail if attribute raw value exceeds this threshold
 
 **Use custom config:**
+
 ```bash
 sudo jmraidstatus --config /etc/jmraidstatus.json /dev/sdc
 ```
 
 This allows you to:
+
 - Accept a small number of reallocated sectors as normal wear
 - Customize temperature thresholds for your environment
 - Disable manufacturer thresholds if they're too conservative
@@ -356,7 +482,7 @@ The JMB567 controller supports up to 5 disks (numbered 0-4). The tool automatica
 
 **⚠️ CRITICAL: See the [Important Warning](#overview) section at the top of this document before using this tool.**
 
-**Read [SECTOR_USAGE.md](SECTOR_USAGE.md) to understand how the tool temporarily overwrites an unused sector on your disk.**
+**Read [docs/SECTOR_USAGE.md](docs/SECTOR_USAGE.md) to understand how the tool temporarily overwrites an unused sector on your disk.**
 
 The tool takes precautions to avoid data corruption:
 
@@ -371,7 +497,7 @@ The tool takes precautions to avoid data corruption:
 - There is documented evidence of this protocol causing **RAID array failure and complete data loss** in at least one case
 - The safety check prevents using sectors with data, but **cannot prevent all failure modes**
 
-**Always ensure you have complete, verified backups before using this tool.** See [SECTOR_USAGE.md](SECTOR_USAGE.md) for technical details and how to verify your disk layout is safe.
+**Always ensure you have complete, verified backups before using this tool.** See [docs/SECTOR_USAGE.md](docs/SECTOR_USAGE.md) for technical details and how to verify your disk layout is safe.
 
 ## Troubleshooting
 
