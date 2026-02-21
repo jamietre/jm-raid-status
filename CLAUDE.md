@@ -26,7 +26,7 @@ Multi-source SMART health monitoring platform with three complementary tools:
    - Safety considerations and sector selection
 
 2. **docs/SECTOR_USAGE.md** - Technical details about sector-as-mailbox communication
-   - Why sector 1024 is used (changed from original 0x21 for safety)
+   - Why sector 33 (0x21) is used as the default, and how it was selected
    - Risks and safety mechanisms
    - HD Sentinel data loss incident
 
@@ -142,7 +142,7 @@ docs/
 ## Safety Warnings
 
 **CRITICAL RISKS**:
-1. Tool temporarily overwrites sector `1024` (or user-specified)
+1. Tool temporarily overwrites sector `33` (or user-specified via `--sector`)
 2. HD Sentinel reported one case of RAID array failure and data loss
 3. Triple-layer safety: range validation, empty sector verification, cleanup with signal handling
 4. **Always have complete backups before use**
@@ -223,8 +223,8 @@ When writing or updating documentation:
    - ❌ --verbose (no backticks)
 
 4. **Technical terms**: Use backticks for specific values
-   - ✅ Sector `1024`, offset `0x1F0`, flag `0x07`
-   - ❌ sector 1024 (when referring to the specific value)
+   - ✅ Sector `33`, offset `0x1F0`, flag `0x07`
+   - ❌ sector 33 (when referring to the specific value)
 
 5. **Code blocks**: Use triple backticks with language
    ```bash

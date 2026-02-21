@@ -8,7 +8,7 @@ JMicron RAID controllers use a proprietary protocol to communicate with individu
 
 **Protocol Communication Method:**
 - Uses a disk sector as a "mailbox" for bidirectional communication
-- Default sector: 1024 (was 0x21/33 in original research, changed for safety)
+- Default sector: `33` (0x21) — original Werner Johansson default, maximum controller compatibility
 - Controller reads commands from the sector, writes responses back
 - Requires exclusive access (sector must be empty)
 
@@ -170,32 +170,7 @@ if (computed != received) {
 
 ## Safety Considerations
 
-### Sector Selection
-
-**Safe sectors:**
-- 33 (0x21): Original default, backward compatibility
-- 64-2047: Between partition table and typical first partition
-
-**Unsafe sectors (rejected):**
-- 0-32: MBR, partition table, GPT, boot loaders
-- 34-63: GPT backup areas
-- 2048+: Typical partition start
-
-### Sector Validation
-
-Before using a sector, the tool:
-1. Reads current contents
-2. Verifies all bytes are zero
-3. Refuses to run if any data present
-4. Backs up original data (should be zeros)
-5. Restores after operation
-
-### Risks
-
-From HD Sentinel developer (November 2019):
-> *"This tested on several systems/enclosures and on most of them, everything worked perfectly. But in one case, we found that it resulted the RAID array to break and the complete information stored on the drives lost."*
-
-**Always ensure complete backups before use.**
+See [docs/SECTOR_USAGE.md](SECTOR_USAGE.md) for full details on sector selection rationale, safe/unsafe sector ranges, validation logic, stale mailbox handling, and risk analysis.
 
 ## Protocol Quirks
 

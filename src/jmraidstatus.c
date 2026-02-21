@@ -359,7 +359,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "  - Sector 2048+: Typical first partition location\n");
             fprintf(stderr, "\n");
             fprintf(stderr, "  Safe range: 33 (0x21, original default), 64-2047\n");
-            fprintf(stderr, "  Recommended: Use default (1024) or run tests/check_sectors\n");
+            fprintf(stderr, "  Recommended: Use default (33) or run tests/check_sectors\n");
             fprintf(stderr, "\n");
             fprintf(stderr, "  See SECTOR_USAGE.md for details.\n");
         }
