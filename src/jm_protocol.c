@@ -227,6 +227,40 @@ int jm_cleanup_device(int fd, uint32_t sector) {
     return JM_SUCCESS;
 }
 
+int jm_zero_sector(int fd, uint32_t sector) {
+    if (fd < 0) {
+        return JM_ERROR_INVALID_ARGS;
+    }
+
+    uint8_t zero_buf[512];
+    memset(zero_buf, 0, 512);
+
+    uint8_t cmd_blk[10];
+    memset(cmd_blk, 0, 10);
+    cmd_blk[0] = WRITE_CMD;
+    cmd_blk[5] = sector & 0xFF;
+    cmd_blk[4] = (sector >> 8) & 0xFF;
+    cmd_blk[3] = (sector >> 16) & 0xFF;
+    cmd_blk[2] = (sector >> 24) & 0xFF;
+    cmd_blk[8] = 0x01;
+
+    sg_io_hdr_t io_hdr;
+    memset(&io_hdr, 0, sizeof(io_hdr));
+    io_hdr.interface_id    = 'S';
+    io_hdr.dxfer_direction = SG_DXFER_TO_DEV;
+    io_hdr.cmd_len         = 10;
+    io_hdr.dxfer_len       = 512;
+    io_hdr.dxferp          = zero_buf;
+    io_hdr.cmdp            = cmd_blk;
+    io_hdr.timeout         = 3000;
+
+    if (ioctl(fd, SG_IO, &io_hdr) < 0) {
+        return JM_ERROR_IOCTL_FAILED;
+    }
+
+    return JM_SUCCESS;
+}
+
 int jm_send_wakeup(int fd, uint32_t sector) {
     uint8_t wakeup_buf[JM_SECTORSIZE];
     uint32_t* wakeup_buf32 = (uint32_t*)wakeup_buf;

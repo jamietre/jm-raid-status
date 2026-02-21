@@ -81,6 +81,18 @@ int jm_send_wakeup(int fd, uint32_t sector);
 int jm_execute_command(int fd, uint32_t* cmd_buf, uint32_t* resp_buf, uint32_t sector);
 
 /**
+ * Write zeros to a sector via SG_IO
+ * Lightweight write-zeros without signal handler side effects.
+ * Used to clear stale JMicron protocol artifacts before a run.
+ * Does NOT close the file descriptor.
+ *
+ * @param fd File descriptor from jm_init_device
+ * @param sector Sector number to zero
+ * @return JM_SUCCESS on success, error code on failure
+ */
+int jm_zero_sector(int fd, uint32_t sector);
+
+/**
  * Get human-readable error message for error code
  *
  * @param error_code Error code from jm_* functions

@@ -52,6 +52,26 @@ static int is_sector_empty(const uint8_t *sector_data, size_t size)
     return 1;
 }
 
+/* Check if a sector contains a recognizable JMicron protocol artifact.
+ * These are leftovers from an interrupted run of this tool (or HD Sentinel)
+ * and are safe to auto-clear because they are not user data.
+ *
+ * Magic values:
+ *   0x197b0325 (LE: 25 03 7b 19) - JMicron wakeup packet (not scrambled)
+ *   0x5d1cc22a (LE: 2a c2 1c 5d) - JMicron command/response (XOR scrambled:
+ *                                   0x197b0322 XOR xor_pattern[0]=0x4467c108)
+ */
+static int is_jmicron_artifact(const uint8_t *buf)
+{
+    /* Wakeup magic: JM_RAID_WAKEUP_CMD = 0x197b0325, stored little-endian */
+    if (buf[0] == 0x25 && buf[1] == 0x03 && buf[2] == 0x7b && buf[3] == 0x19)
+        return 1;
+    /* Scrambled command/response magic: 0x197b0322 XOR 0x4467c108 = 0x5d1cc22a */
+    if (buf[0] == 0x2a && buf[1] == 0xc2 && buf[2] == 0x1c && buf[3] == 0x5d)
+        return 1;
+    return 0;
+}
+
 /* Validate sector number is in a safe range */
 static int is_sector_in_safe_range(uint32_t sector)
 {
@@ -429,23 +449,48 @@ int main(int argc, char **argv)
     /* Check if sector is empty (all zeros) - safety requirement */
     if (!is_sector_empty(backup_sector, 512))
     {
-        if (!options.quiet)
+        if (is_jmicron_artifact(backup_sector))
         {
-            fprintf(stderr, "Error: Sector %u contains data (not all zeros)\n", options.sector);
-            fprintf(stderr, "  The tool requires an empty sector to use as a communication channel.\n");
-            fprintf(stderr, "  This sector may contain partition data, RAID metadata, or other critical information.\n");
-            fprintf(stderr, "\n");
-            fprintf(stderr, "  Safety check failed to prevent potential data corruption.\n");
-            fprintf(stderr, "\n");
-            fprintf(stderr, "  Solutions:\n");
-            fprintf(stderr, "  1. Check your partition layout: sudo fdisk -l %s\n", options.device_path);
-            fprintf(stderr, "  2. Use a different sector: --sector XXXX (must be unused)\n");
-            fprintf(stderr, "  3. Use tests/check_sectors to find an empty sector\n");
-            fprintf(stderr, "\n");
-            fprintf(stderr, "  See SECTOR_USAGE.md for details.\n");
+            /* Stale JMicron protocol data from an interrupted previous run.
+             * This is not user data - it's safe to clear and proceed.
+             * Most likely cause: previous run was killed with SIGKILL before
+             * cleanup, or the controller held a pending response in its mailbox. */
+            fprintf(stderr, "Warning: Sector %u contained a stale JMicron protocol artifact "
+                            "(leftover from interrupted run). Clearing and proceeding.\n",
+                    options.sector);
+            fprintf(stderr, "  First 4 bytes: %02x %02x %02x %02x\n",
+                    backup_sector[0], backup_sector[1], backup_sector[2], backup_sector[3]);
+            if (jm_zero_sector(fd, options.sector) != JM_SUCCESS)
+            {
+                fprintf(stderr, "Error: Failed to clear stale sector data\n");
+                close(fd);
+                return 3;
+            }
         }
-        close(fd);
-        return 3;
+        else
+        {
+            if (!options.quiet)
+            {
+                fprintf(stderr, "Error: Sector %u contains data (not all zeros)\n", options.sector);
+                fprintf(stderr, "  First 16 bytes: ");
+                for (int i = 0; i < 16; i++)
+                    fprintf(stderr, "%02x ", backup_sector[i]);
+                fprintf(stderr, "\n");
+                fprintf(stderr, "  The tool requires an empty sector to use as a communication channel.\n");
+                fprintf(stderr, "  This sector may contain partition data, RAID metadata, or other critical information.\n");
+                fprintf(stderr, "\n");
+                fprintf(stderr, "  Safety check failed to prevent potential data corruption.\n");
+                fprintf(stderr, "\n");
+                fprintf(stderr, "  Solutions:\n");
+                fprintf(stderr, "  1. Check your partition layout: sudo fdisk -l %s\n", options.device_path);
+                fprintf(stderr, "  2. Use a different sector: --sector XXXX (must be unused)\n");
+                fprintf(stderr, "  3. Use tests/check_sectors to find an empty sector\n");
+                fprintf(stderr, "\n");
+                fprintf(stderr, "  See SECTOR_USAGE.md for details.\n");
+            }
+            close(fd);
+            return 3;
+        }
     }
 
     if (options.verbose)

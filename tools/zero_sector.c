@@ -96,13 +96,14 @@ int main(int argc, char* argv[]) {
     /* Sanity checks */
     if (sector == 0) {
         fprintf(stderr, "ERROR: Refusing to write to sector 0 (partition table/MBR)\n");
-        fprintf(stderr, "       This tool is only for cleaning up communication sectors.\n");
         return 1;
     }
 
-    if (sector < 64) {
-        fprintf(stderr, "ERROR: Refusing to write to sector %u (system area)\n", sector);
-        fprintf(stderr, "       jmraidstatus uses sector 1024 by default.\n");
+    /* Sector 33 (0x21) is the original JMicron default and is explicitly allowed.
+     * All other sectors below 64 are system areas (boot loaders, GPT, etc.). */
+    if (sector != 33 && sector < 64) {
+        fprintf(stderr, "ERROR: Refusing to write to sector %u (system area, sectors 1-32 and 34-63 are reserved)\n", sector);
+        fprintf(stderr, "       jmraidstatus uses sector 33 (0x21) by default.\n");
         return 1;
     }
 
