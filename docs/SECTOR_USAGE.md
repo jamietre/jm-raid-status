@@ -224,8 +224,64 @@ If `jmraidstatus` refuses to run because the sector contains **unrecognized data
 
 3. Use a different sector if you are unsure:
    ```bash
-   sudo jmraidstatus --sector 1024 /dev/sdX
+   sudo jmraidstatus --sector 64 /dev/sdX
    ```
+
+---
+
+## Incident Log
+
+### February 2026 — Unrecognized Stale Mailbox + Primary GPT Corruption (Mediasonic HFR2-SU3S2 / JMB567)
+
+**Symptom**: `jmraidstatus` refused to run with:
+```
+Error: Sector 33 contains data (not all zeros)
+  First 16 bytes: 2e 2e 2f 2e 2e 2f 2e 2e 2f 35 3a 30 3a 30 3a 30
+```
+
+The bytes decode as ASCII: `../../5:0:0:0` — a SCSI host:channel:target:LUN path format. This did not match either known JMicron signature, so the auto-clear logic did not trigger.
+
+**Diagnosis**:
+- `dd if=/dev/usb1 skip=33 count=1 bs=512 | xxd` showed **all zeros** (block device layer)
+- `tools/read_sector /dev/usb1 33` showed the `../../5:0:0:0` data (SG_IO)
+- The dd vs SG_IO discrepancy confirms this was a **controller mailbox artifact** — the physical sector was empty but the controller was intercepting reads and returning stale data from a previous (interrupted) session
+- Origin of `../../5:0:0:0` pattern is unknown — possibly a different tool (jJMRaidCon, HD Sentinel) or an unusual controller response format
+
+**Additional finding**: `fdisk -l /dev/usb1` reported the **primary GPT as corrupt**, with the backup GPT being used as fallback. Sector `33` is the last sector of the primary GPT partition entry array (entries 125–128, all zeros since there are only 2 partitions). It is possible a previous `jmraidstatus` run wrote to the physical sector before the controller's interception was fully established, invalidating the GPT CRC.
+
+**Resolution**:
+1. Confirmed physical sector was zeros via `dd` (safe to clear)
+2. Cleared controller mailbox with `tools/zero_sector /dev/usb1 33`
+3. `jmraidstatus` ran successfully; all 4 disks healthy
+4. Verified and repaired primary GPT: `sudo sgdisk -v /dev/usb1`
+
+**Notes for future occurrence**:
+- If sector 33 has unrecognized data but `dd` shows zeros, it is a controller artifact — safe to clear with `zero_sector`
+- After clearing, also run `sudo sgdisk -v /dev/usb1` to verify GPT integrity
+- If the primary GPT is repeatedly corrupt, consider whether the controller is occasionally letting SG_IO writes through to the physical sector; switching to `--sector 64` may help (verify it falls outside all partitions first with `fdisk -l`)
+
+---
+
+## Does jmraidstatus Actually Write to the Physical Disk?
+
+**Almost certainly not.** The JMicron controller intercepts all SG_IO READ(10) and WRITE(10) commands to the communication sector at the firmware level. When `jmraidstatus` writes a wakeup packet or command via SG_IO, the controller intercepts it and treats it as a protocol message — the bytes never reach the physical disk platters.
+
+**Evidence:**
+- `dd` reads via the OS block device layer, which the controller does not intercept. `dd` consistently shows zeros at sector `33` before, during, and after `jmraidstatus` runs, confirming the physical sector is never modified.
+- The controller returns its own state data (`../../5:0:0:0`) on SG_IO reads even when `dd` shows zeros — demonstrating the controller is substituting its own data, not returning physical disk content.
+- The cleanup step (writing zeros via SG_IO) is intercepted by the controller and acts as a "session end" signal, resetting the controller's mailbox state. It is not a disk write.
+
+**Implication for the safety check:**
+
+Because SG_IO reads return controller state rather than physical disk content, **block device I/O (`dd`-style) is the correct safety check**, not SG_IO. The tool does a block device read before doing anything else. If the block device shows non-zero data, the physical sector contains real user data and the tool refuses to run. Controller mailbox state visible via SG_IO is irrelevant to this decision — the wakeup sequence resets it regardless.
+
+**Caveats:**
+
+1. **The HD Sentinel data loss incident** — if the controller truly intercepted everything, data loss would be impossible. Something went wrong on that specific hardware/firmware combination. Either the interception failed, a write reached an unexpected sector, or the controller's internal state was corrupted by the commands. We don't know. The safety check exists as defense against this.
+
+2. **Wrong device** — if `jmraidstatus` is run against a device that is *not* a JMicron controller, no interception occurs and it genuinely overwrites sector `33`. Hardware detection and the block device safety check both protect against this.
+
+3. **Controller idle state** — after a completed session, the controller enters an idle/ready state where it returns a consistent pattern (observed: `../../5:0:0:0`) on SG_IO reads. This is normal behavior, not stale data. The wakeup sequence overrides this state. The block device check correctly ignores it.
 
 ---
 

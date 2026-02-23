@@ -24,15 +24,16 @@ typedef enum {
 
 /**
  * Initialize JMicron device for communication
- * Opens device, verifies it's an SG device, and backs up the working sector
+ * Opens device, verifies it's an SG device, and sets up the SG_IO header.
+ *
+ * The caller is responsible for verifying the sector is safe to use before
+ * calling this function (use jm_read_sector_block for the block device check).
  *
  * @param device_path Path to SCSI generic device (e.g., "/dev/sdc")
  * @param fd_out Output file descriptor for the opened device
- * @param backup_sector Buffer to store backup of sector (must be 512 bytes)
- * @param sector Sector number to use for communication (default: 0x21)
  * @return JM_SUCCESS on success, error code on failure
  */
-int jm_init_device(const char* device_path, int* fd_out, uint8_t* backup_sector, uint32_t sector);
+int jm_init_device(const char* device_path, int* fd_out);
 
 /**
  * Clean up and restore sector to zeros
@@ -91,6 +92,24 @@ int jm_execute_command(int fd, uint32_t* cmd_buf, uint32_t* resp_buf, uint32_t s
  * @return JM_SUCCESS on success, error code on failure
  */
 int jm_zero_sector(int fd, uint32_t sector);
+
+/**
+ * Read a sector via normal block device I/O (not SG_IO)
+ *
+ * This bypasses the JMicron controller's SG_IO interception, reading what is
+ * physically stored on disk (via the OS page cache / block layer). Used as the
+ * authoritative safety check: if the block device shows non-zero data, real
+ * user data exists at that sector and the tool must refuse to proceed.
+ *
+ * SG_IO may show controller mailbox state even when the physical sector is
+ * empty, so block I/O is the correct source of truth for the safety check.
+ *
+ * @param device_path Path to device (e.g., "/dev/sdc")
+ * @param sector Sector number to read
+ * @param buf Output buffer (must be 512 bytes)
+ * @return 0 on success, -1 on failure
+ */
+int jm_read_sector_block(const char *device_path, uint32_t sector, uint8_t *buf);
 
 /**
  * Get human-readable error message for error code

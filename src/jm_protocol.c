@@ -134,11 +134,11 @@ const char* jm_error_string(jm_error_code_t error_code) {
     }
 }
 
-int jm_init_device(const char* device_path, int* fd_out, uint8_t* backup_sector, uint32_t sector) {
+int jm_init_device(const char* device_path, int* fd_out) {
     int fd;
     int sg_version;
 
-    if (device_path == NULL || fd_out == NULL || backup_sector == NULL) {
+    if (device_path == NULL || fd_out == NULL) {
         return JM_ERROR_INVALID_ARGS;
     }
 
@@ -164,23 +164,8 @@ int jm_init_device(const char* device_path, int* fd_out, uint8_t* backup_sector,
     sg_io_hdr.sbp = sense_buffer;
     sg_io_hdr.timeout = 3000;
 
-    /* Setup read command block with specified sector */
     memset(rw_cmd_blk, 0, RW_CMD_LEN);
-    rw_cmd_blk[0] = READ_CMD;
-    rw_cmd_blk[5] = sector & 0xFF;
-    rw_cmd_blk[4] = (sector >> 8) & 0xFF;
-    rw_cmd_blk[3] = (sector >> 16) & 0xFF;
-    rw_cmd_blk[2] = (sector >> 24) & 0xFF;
-    rw_cmd_blk[8] = 0x01;  // Number of sectors
-
-    /* Read and backup the sector */
-    sg_io_hdr.dxfer_direction = SG_DXFER_FROM_DEV;
-    sg_io_hdr.dxferp = backup_sector;
-
-    if (ioctl(fd, SG_IO, &sg_io_hdr) < 0) {
-        close(fd);
-        return JM_ERROR_IOCTL_FAILED;
-    }
+    rw_cmd_blk[8] = 0x01;  /* Number of sectors */
 
     *fd_out = fd;
     return JM_SUCCESS;
@@ -353,4 +338,25 @@ int jm_execute_command(int fd, uint32_t* cmd_buf, uint32_t* resp_buf, uint32_t s
     }
 
     return JM_SUCCESS;
+}
+
+int jm_read_sector_block(const char *device_path, uint32_t sector, uint8_t *buf)
+{
+    if (!device_path || !buf)
+        return -1;
+
+    int fd = open(device_path, O_RDONLY);
+    if (fd < 0)
+        return -1;
+
+    off_t offset = (off_t)sector * JM_SECTORSIZE;
+    if (lseek(fd, offset, SEEK_SET) < 0) {
+        close(fd);
+        return -1;
+    }
+
+    ssize_t n = read(fd, buf, JM_SECTORSIZE);
+    close(fd);
+
+    return (n == JM_SECTORSIZE) ? 0 : -1;
 }
