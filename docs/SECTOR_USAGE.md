@@ -316,12 +316,11 @@ The JMicron protocol **temporarily uses a communication sector** (default: `33`)
 **Key Points:**
 
 - ✅ Sector `33` (0x21) — original JMicron default, maximum controller compatibility
-- ✅ Tool reads sector via SG_IO (bypasses OS cache, sees actual controller state)
-- ✅ Tool verifies sector is empty before use — mandatory safety check
-- ✅ Recognized JMicron artifacts auto-cleared with a warning
-- ✅ Sector restored to zeros after operations, with signal handling for graceful exits
-- ⚠️ SIGKILL cannot be caught — may leave stale mailbox state
-- ⚠️ `dd` vs SG_IO discrepancy is expected and normal when controller holds a pending response
+- ✅ Safety check uses block device I/O (`dd`-style) — reads physical disk content, not controller mailbox
+- ✅ Tool refuses to run if physical sector contains non-zero data
+- ✅ Sector restored to zeros after operations via SG_IO, with signal handling for graceful exits
+- ⚠️ SIGKILL cannot be caught — may leave stale controller mailbox state (harmless; wakeup sequence resets it)
+- ⚠️ `dd` vs SG_IO discrepancy is expected and normal — controller returns its own state via SG_IO
 - ⚠️ Controller malfunction risk exists (extremely rare but documented)
 
 **Always have complete backups before use.**

@@ -14,11 +14,12 @@ JMicron RAID controllers use a proprietary protocol to communicate with individu
 
 ## Communication Flow
 
-1. **Backup sector**: Read and save original sector data
-2. **Send command**: Write command packet to sector
-3. **Execute**: Controller processes command
-4. **Read response**: Read controller's response from same sector
-5. **Restore**: Write original data back to sector
+1. **Safety check**: Read sector via block device I/O (`dd`-style) — verify physical sector is empty
+2. **Wakeup**: Write 4 wakeup packets to sector via SG_IO — wakes controller from idle state
+3. **Send command**: Write scrambled command packet to sector via SG_IO
+4. **Execute**: Controller intercepts write, processes command, writes response back to sector
+5. **Read response**: Read controller's response from sector via SG_IO
+6. **Cleanup**: Write zeros to sector via SG_IO — resets controller mailbox state
 
 ## Command Structure
 
